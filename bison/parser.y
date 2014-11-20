@@ -4,13 +4,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* type of $$ in semantic actions */
+/* #define YYSTYPE double */
 %} 
 
 %union {
     char* id; /* identifiers */
+    char* sval; /* strings */
+    int ival; /* integers */
+    double fval; /* floats/doubles */
 }
 
-%token INTEGER FLOAT BOOL
+%token INTEGER FLOAT BOOL STRING
 %token SEPARATOR IF WHILE ELSEIF ELSE END
 %token PRINTLN
 %token <id> VAR_OR_FN

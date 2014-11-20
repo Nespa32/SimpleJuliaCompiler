@@ -21,8 +21,14 @@ string          {double_quote}.+{double_quote}
 %%
 
 {white}                     { /* eat up whitespace */ }
-{integer}                   { printf("[INTEGER : %s] ", yytext); return INTEGER; }
-{real}                      { printf("[FLOAT : %s] ", yytext); return FLOAT; }
+
+{integer}                   { printf("[INTEGER : %s] ", yytext);
+                                yylval.ival = atoi(yytext);
+                                return INTEGER; }
+                                
+{real}                      { printf("[FLOAT : %s] ", yytext);
+                                yylval.fval = atof(yytext);
+                                return FLOAT; }
     
 "!"|"+"|"-"|"*"|"/"          { printf("[%c] ", yytext[0]); return yytext[0]; }
 ">"|"<"|"="                 { printf("[%c] ", yytext[0]); return yytext[0]; }
@@ -30,18 +36,20 @@ string          {double_quote}.+{double_quote}
 
 "\n"|";"                    { printf("[SEPARATOR] \n"); return SEPARATOR; }
 
-">="|"<="|"!="|"=="         { printf("[KEYWORD : %s] ", yytext); return strdup(yytext); }
+">="|"<="|"!="|"=="         { printf("[KEYWORD : %s] ", yytext); /* return @todo */ }
 "if"                        { printf("[IF]"); return IF; }
 "while"                     { printf("[WHILE]"); return WHILE; }
 "elseif"                    { printf("[ELSEIF]"); return ELSEIF; }
 "else"                      { printf("[ELSE]"); return ELSE; }
 "end"                       { printf("[END]"); return END; }
 
-{id}                        { printf("[VAR_OR_FN : %s] ", yytext); yylval.id = (char *)strdup(yytext);
+{id}                        { printf("[VAR_OR_FN : %s] ", yytext); yylval.id = (char*)strdup(yytext);
                                 return VAR_OR_FN; }
 
 {line_comment}              { printf("[COMMENT + SEPARATOR] \n"); return SEPARATOR; }
-{string}                    { printf("[STRING : %s]", yytext); return strdup(yytext); }
+{string}                    { printf("[STRING : %s]", yytext);
+                                yylval.sval = (char*)strdup(yytext);
+                                return STRING; }
 
 .                           { printf("[UNK] "); }
 

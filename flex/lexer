@@ -37,7 +37,9 @@ string          {double_quote}.+{double_quote}
 "else"                      { printf("[ELSE]"); return ELSE; }
 "end"                       { printf("[END]"); return END; }
 
-{id}                        { printf("[VAR_OR_FN : %s] ", yytext); return VAR_OR_FN; }
+{id}                        { printf("[VAR_OR_FN : %s] ", yytext); yylval.id = (char *)strdup(yytext);
+                                return VAR_OR_FN; }
+
 {line_comment}              { printf("[COMMENT + SEPARATOR] \n"); return SEPARATOR; }
 {string}                    { printf("[STRING : %s]", yytext); return strdup(yytext); }
 

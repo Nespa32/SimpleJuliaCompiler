@@ -2,12 +2,18 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 %} 
 
+%union {
+    char* id; /* identifiers */
+}
+
 %token INTEGER FLOAT BOOL
 %token SEPARATOR IF WHILE ELSEIF ELSE END
-%token PRINTLN VAR_OR_FN
+%token PRINTLN
+%token <id> VAR_OR_FN
 %token '=' ';'
 %token '+' '-' '*' '/'
 %token '(' ')'
@@ -15,6 +21,7 @@
 %left '+' '-'
 %left '*' '/'
 %left '!'
+%left '='
 
 %start program
 %%
@@ -33,6 +40,7 @@ exp: INTEGER                    { printf("[exp : INTEGER] "); }
     | FLOAT                     { printf("[exp : FLOAT] "); }
     | exp op exp                { printf("[exp : exp op exp] "); }
     | '(' exp ')'               { printf("[exp : '(' exp ')'] "); }
+    | exp '=' exp               { printf("[exp : exp '=' exp] "); }
 ;
 
 op: '+' | '-' | '*' | '/' | '>' | '<'
@@ -52,8 +60,8 @@ else_block: /* empty */
     | ELSE SEPARATOR exp_list
 ;
 
-exp_list: exp SEPARATOR
-    | exp SEPARATOR exp_list
+exp_list: exp SEPARATOR         { printf("[exp_list : exp SEPARATOR] "); }
+    | exp SEPARATOR exp_list    { printf("[exp_list : exp SEPARATOR exp_list] "); }              
 ;
 
 %%

@@ -1,0 +1,10 @@
+# Bison generated files
+bison/*.tab.*
+bison/*.output
+
+# Flex generated files
+flex/*.yy.*
+
+# Build files
+build*/
+

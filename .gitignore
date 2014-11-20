@@ -1,9 +1,9 @@
 # Bison generated files
-bison/*.tab.*
-bison/*.output
+src/bison/*.tab.*
+src/bison/*.output
 
 # Flex generated files
-flex/*.yy.*
+src/flex/*.yy.*
 
 # Build files
 build*/

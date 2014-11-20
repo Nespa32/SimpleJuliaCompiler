@@ -1,13 +1,49 @@
  
 %{
-
 #include <stdlib.h>
+
+// needed for token enum
+#include "../bison/parser.tab.h"
 
 %}
 
+white           [ \t]+
+digit           [0-9]
+integer         {digit}+
+real            {integer}("."{integer})?
+id              [a-zA-Z]([a-zA-Z0-9_!]+)?
+line_comment    "#".+"\n"
+single_quote    "'"
+double_quote    "\""
+char            {single_quote}"\".{single_quote}
+string          {double_quote}.+{double_quote}
+
+%%
+
+{white}                     { /* eat up whitespace */ }
+{integer}                   { printf("[INTEGER : %s] ", yytext); return INTEGER; }
+{real}                      { printf("[FLOAT : %s] ", yytext); return FLOAT; }
+    
+"!"|"+"|"-"|"*"|"/"          { printf("[%c] ", yytext[0]); return yytext[0]; }
+">"|"<"|"="                 { printf("[%c] ", yytext[0]); return yytext[0]; }
+"("|")"                     { printf("[%c] ", yytext[0]); return yytext[0]; }
+
+"\n"                        { printf("[SEPARATOR] \n"); /*return SEPARATOR;*/ }
+
+">="|"<="|"!="|"=="         { printf("[KEYWORD : %s] ", yytext); return strdup(yytext); }
+"if"                        { printf("[IF]"); return IF; }
+"while"                     { printf("[WHILE]"); return WHILE; }
+"elseif"                    { printf("[ELSEIF]"); return ELSEIF; }
+"else"                      { printf("[ELSE]"); return ELSE; }
+"end"                       { printf("[END]"); return END; }
+
+{id}                        { printf("[VAR_OR_FN : %s] ", yytext); return VAR_OR_FN; }
+{line_comment}              { printf("[COMMENT + SEPARATOR] \n"); /*return SEPARATOR;*/ }
+{string}                    { printf("[STRING : %s]", yytext); return strdup(yytext); }
+
+.                           { printf("[UNK] "); }
+
 %%
 
 
-
-%%
 

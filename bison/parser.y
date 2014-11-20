@@ -2,6 +2,7 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+
 %} 
 
 %token INTEGER FLOAT BOOL
@@ -20,6 +21,7 @@
 
 program: /* empty */
        | program command        { printf("[program : program command] "); }
+       | program command SEPARATOR { printf("[program : program command SEPARATOR] "); }
 ;
 
 command : exp                   { printf("[command : exp] "); }
@@ -36,22 +38,22 @@ exp: INTEGER                    { printf("[exp : INTEGER] "); }
 op: '+' | '-' | '*' | '/' | '>' | '<'
 ;
 
-if_exp: IF exp exp END          { printf("[if_exp : IF exp exp END] "); }    
+if_exp: IF exp SEPARATOR exp_list elseif_block else_block END          { printf("[if_exp  ] "); }    
 ;
 
-while_exp: WHILE exp exp END
+while_exp: WHILE exp SEPARATOR exp_list END
 ;
 
-elseif: /* empty */
-    | ELSEIF exp exp
+elseif_block: /* empty */
+    | ELSEIF exp SEPARATOR exp_list
 ;
 
-else: /* empty */
-    | ELSE exp_list
+else_block: /* empty */
+    | ELSE SEPARATOR exp_list
 ;
 
-exp_list: exp
-    | exp exp_list
+exp_list: exp SEPARATOR
+    | exp SEPARATOR exp_list
 ;
 
 %%

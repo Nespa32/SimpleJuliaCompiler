@@ -3,22 +3,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../symbol_table.h"
+#include "../parse_node.h"
 
 /* type of $$ in semantic actions */
-/* #define YYSTYPE double */
-%} 
+// #define YYSTYPE parse_node*
+
+/* @todo:
+- else if chaining returns a parse error
+*/
 
 %union {
     char* id; /* identifiers */
     char* sval; /* strings */
     int ival; /* integers */
     double fval; /* floats/doubles */
+    parse_node* node; /* node for tree structure */
 }
 
-%token INTEGER FLOAT BOOL STRING
-%token SEPARATOR IF WHILE ELSEIF ELSE END
+%token <ival> BOOL
+%token <ival> INTEGER
+%token <fval> FLOAT
+%token <sval> STRING
+%token <node> SEPARATOR IF WHILE ELSEIF ELSE END
 %token PRINTLN
-%token <id> VAR_OR_FN
+%token <id> VAR
 %token '=' ';'
 %token '+' '-' '*' '/'
 %token '(' ')'
@@ -41,7 +50,9 @@ command : exp                   { printf("[command : exp] "); }
         | while_exp             { printf("[command : while_exp] "); }    
 ;
 
-exp: INTEGER                    { printf("[exp : INTEGER] "); }
+exp: INTEGER                    { printf("[exp : INTEGER] ");
+                                  $$.node = (parse_node*)malloc(sizeof(parse_node)); 
+                                  $$.node->type = INTEGER; }
     | FLOAT                     { printf("[exp : FLOAT] "); }
     | exp op exp                { printf("[exp : exp op exp] "); }
     | '(' exp ')'               { printf("[exp : '(' exp ')'] "); }
@@ -51,14 +62,16 @@ exp: INTEGER                    { printf("[exp : INTEGER] "); }
 op: '+' | '-' | '*' | '/' | '>' | '<'
 ;
 
-if_exp: IF exp SEPARATOR exp_list elseif_block else_block END          { printf("[if_exp  ] "); }    
+if_exp: IF exp SEPARATOR exp_list elseif_list else_block END          { printf("[if_exp  ] "); }    
 ;
 
 while_exp: WHILE exp SEPARATOR exp_list END
 ;
 
-elseif_block: /* empty */
-    | ELSEIF exp SEPARATOR exp_list
+elseif_list: /* empty */
+            elseif_list elseif_block
+            
+elseif_block: ELSEIF exp SEPARATOR exp_list     { printf("[elseif_block 2] "); }
 ;
 
 else_block: /* empty */

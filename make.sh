@@ -24,5 +24,5 @@ cd src/bison/
 bison -d parser.y --report=state
 
 cd ../../
-gcc -Wall src/flex/lex.yy.c src/bison/parser.tab.c libs/libyywrap.c -o build/compiler
+gcc -Wall src/flex/lex.yy.c src/bison/parser.tab.c libs/libyywrap.c src/symbol_table.c src/parse_node.c -o build/compiler
 

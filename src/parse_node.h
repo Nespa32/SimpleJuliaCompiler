@@ -3,6 +3,12 @@ struct parse_node
 {
     /* values */
     int type;
+    union
+    {
+        char* sval;     /* strings */
+        int ival;       /* integers */
+        double fval;    /* floats/doubles */
+    } data;
     
     struct parse_node* left;
     struct parse_node* right;

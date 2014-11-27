@@ -85,10 +85,12 @@ command : if_exp                { DEBUG_LOG("Reduce [if_exp] to [command]\n");
 ;
 
 exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
-                                  $$ = make_node(INTEGER, NULL, NULL); }
+                                  $$ = make_node(INTEGER, NULL, NULL);
+                                  $$->data.ival = yylval.ival; }
 
     | FLOAT                     { DEBUG_LOG("Reduce [FLOAT] to [exp]\n");
-                                  $$ = make_node(FLOAT, NULL, NULL); }
+                                  $$ = make_node(FLOAT, NULL, NULL);
+                                  $$->data.fval = yylval.fval;}
 
     | exp op exp                { DEBUG_LOG("Reduce [exp op exp] to [exp]\n");
                                   if ($1->type != $3->type) {
@@ -144,15 +146,73 @@ else_block: /* empty */                 { $$ = NULL; }
 exp_list: exp                           { DEBUG_LOG("Reduce [exp] to [exp_list]\n");
                                           $$ = $1; }
 
-    | exp_list exp                      { DEBUG_LOG("Reduce [exp_list exp] to [exp_list]\n");
-                                          $$ = make_node(0 /* @todo: give proper type */, $1, $2); }
+    | exp_list sep exp                  { DEBUG_LOG("Reduce [exp_list exp] to [exp_list]\n");
+                                          $$ = make_node(0 /* @todo: give proper type */, $1, $3); }
 ;
+
+sep : /* empty */                       { }
+    | SEPARATOR
 
 %%
 
 int yyerror(char *s) {
     printf("yyerror: %s\n", s);
     return 0;
+}
+
+int spaces = 0;
+
+void print_tree(parse_node* node)
+{
+    if (node == NULL)
+        return;
+
+    int i = 0;
+    for (; i < spaces; ++i)
+        printf("-");
+    
+    parse_node* left = node->left;
+    parse_node* right = node->right;
+    parse_node* next = node->next;
+    
+    char* typeStr;
+    char valStr[20];
+    switch (node->type)
+    {
+        case INTEGER:
+            typeStr = "INTEGER";
+            sprintf(valStr, "%d", node->data.ival);
+            break;
+        case FLOAT:
+            typeStr = "FLOAT";
+            sprintf(valStr, "%f", node->data.fval);
+            break;
+        case STRING:
+            typeStr = "STRING";
+            sprintf(valStr, "%s", node->data.sval);
+            break;
+        case VAR:
+            typeStr = "VAR";
+            sprintf(valStr, "%s", node->data.sval);
+            break;
+        default:
+            typeStr = "UNK";
+            sprintf(valStr, "None");
+            break;
+    }
+
+    printf(" [Node] Type: %s, Val: %s, Left: %s, Right: %s, Next: %s\n",
+        typeStr,
+        valStr,
+        left ? "Yes" : "No",
+        right ? "Yes" : "No",
+        next ? "Yes" : "No");
+
+    ++spaces;
+    print_tree(left);
+    print_tree(right);
+    print_tree(next);
+    --spaces;
 }
 
 int main() {
@@ -162,5 +222,7 @@ int main() {
     else
         fprintf(stderr, "Parser: Error (%d).\n", result);
      
+    print_tree(root);
+    free_parse_node(root); // delete the whole tree structure
     return 0;
 }

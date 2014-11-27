@@ -10,7 +10,7 @@ int __lexer_debug__ = 0; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
-        if (__lexer_debug__  != 0)     \
+        if (__lexer_debug__  != 0)      \
             printf(__VA_ARGS__);        \
     } while (0)
 
@@ -32,12 +32,12 @@ string          {double_quote}.+{double_quote}
 {white}                     { /* eat up whitespace */ }
 
 {integer}                   { DEBUG_LOG("[INTEGER : %s] ", yytext);
-                                yylval.ival = atoi(yytext);
-                                return INTEGER; }
+                              yylval.ival = atoi(yytext);
+                              return INTEGER; }
                                 
 {real}                      { DEBUG_LOG("[FLOAT : %s] ", yytext);
-                                yylval.fval = atof(yytext);
-                                return FLOAT; }
+                              yylval.fval = atof(yytext);
+                              return FLOAT; }
     
 "!"|"+"|"-"|"*"|"/"         { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
 ">"|"<"|"="                 { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
@@ -52,13 +52,15 @@ string          {double_quote}.+{double_quote}
 "else"                      { DEBUG_LOG("[ELSE]"); return ELSE; }
 "end"                       { DEBUG_LOG("[END]"); return END; }
 
-{id}                        { DEBUG_LOG("[VAR : %s] ", yytext); yylval.id = (char*)strdup(yytext);
-                                return VAR; }
+{id}                        { DEBUG_LOG("[VAR : %s] ", yytext);
+                              yylval.id = (char*)strdup(yytext);
+                              return VAR; }
 
 {line_comment}              { DEBUG_LOG("[COMMENT + SEPARATOR] \n"); /* return SEPARATOR; */ }
+
 {string}                    { DEBUG_LOG("[STRING : %s]", yytext);
-                                yylval.sval = (char*)strdup(yytext);
-                                return STRING; }
+                              yylval.sval = (char*)strdup(yytext);
+                              return STRING; }
 
 .                           { DEBUG_LOG("[UNK] "); }
 

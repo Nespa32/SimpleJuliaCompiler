@@ -6,6 +6,14 @@
 /* needed for token enum */
 #include "../bison/parser.tab.h"
 
+int __parser_debug__ = 1; /* toggle for debug prints*/
+
+#define DEBUG_LOG(...)                  \
+    do {                                \
+        if (__parser_debug__  != 0)     \
+            printf(__VA_ARGS__);        \
+    } while (0)
+
 %}
 
 white           [ \t]+
@@ -23,36 +31,36 @@ string          {double_quote}.+{double_quote}
 
 {white}                     { /* eat up whitespace */ }
 
-{integer}                   { printf("[INTEGER : %s] ", yytext);
+{integer}                   { DEBUG_LOG("[INTEGER : %s] ", yytext);
                                 yylval.ival = atoi(yytext);
                                 return INTEGER; }
                                 
-{real}                      { printf("[FLOAT : %s] ", yytext);
+{real}                      { DEBUG_LOG("[FLOAT : %s] ", yytext);
                                 yylval.fval = atof(yytext);
                                 return FLOAT; }
     
-"!"|"+"|"-"|"*"|"/"          { printf("[%c] ", yytext[0]); return yytext[0]; }
-">"|"<"|"="                 { printf("[%c] ", yytext[0]); return yytext[0]; }
-"("|")"                     { printf("[%c] ", yytext[0]); return yytext[0]; }
+"!"|"+"|"-"|"*"|"/"         { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
+">"|"<"|"="                 { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
+"("|")"                     { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
 
-"\n"|";"                    { printf("[SEPARATOR] \n"); return SEPARATOR; }
+"\n"|";"                    { DEBUG_LOG("[SEPARATOR] \n"); /* return SEPARATOR; */ }
 
-">="|"<="|"!="|"=="         { printf("[KEYWORD : %s] ", yytext); /* return @todo */ }
-"if"                        { printf("[IF]"); return IF; }
-"while"                     { printf("[WHILE]"); return WHILE; }
-"elseif"                    { printf("[ELSEIF]"); return ELSEIF; }
-"else"                      { printf("[ELSE]"); return ELSE; }
-"end"                       { printf("[END]"); return END; }
+">="|"<="|"!="|"=="         { DEBUG_LOG("[KEYWORD : %s] ", yytext); /* return @todo */ }
+"if"                        { DEBUG_LOG("[IF]"); return IF; }
+"while"                     { DEBUG_LOG("[WHILE]"); return WHILE; }
+"elseif"                    { DEBUG_LOG("[ELSEIF]"); return ELSEIF; }
+"else"                      { DEBUG_LOG("[ELSE]"); return ELSE; }
+"end"                       { DEBUG_LOG("[END]"); return END; }
 
-{id}                        { printf("[VAR : %s] ", yytext); yylval.id = (char*)strdup(yytext);
+{id}                        { DEBUG_LOG("[VAR : %s] ", yytext); yylval.id = (char*)strdup(yytext);
                                 return VAR; }
 
-{line_comment}              { printf("[COMMENT + SEPARATOR] \n"); return SEPARATOR; }
-{string}                    { printf("[STRING : %s]", yytext);
+{line_comment}              { DEBUG_LOG("[COMMENT + SEPARATOR] \n"); /* return SEPARATOR; */ }
+{string}                    { DEBUG_LOG("[STRING : %s]", yytext);
                                 yylval.sval = (char*)strdup(yytext);
                                 return STRING; }
 
-.                           { printf("[UNK] "); }
+.                           { DEBUG_LOG("[UNK] "); }
 
 %%
 

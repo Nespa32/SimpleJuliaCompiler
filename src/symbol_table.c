@@ -5,14 +5,13 @@
 #include "symbol_table.h"
 
 // global variable
-symbol_entry* symtable = (symbol_entry*)0;
+symbol_entry* symtable = NULL;
 
 symbol_entry* put_symbol(char* symname, int type)
 {
     symbol_entry* ptr;
     ptr = (symbol_entry*)malloc(sizeof(symbol_entry));
-    ptr->name = (char*)malloc(strlen(symname)+1);
-    strcpy(ptr->name, symname);
+    ptr->name = strdup(symname);
     ptr->type = type;
     ptr->next = (symbol_entry*)symtable;
     symtable = ptr;

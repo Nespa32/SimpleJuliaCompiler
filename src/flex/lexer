@@ -53,7 +53,7 @@ string          {double_quote}.+{double_quote}
 "end"                       { DEBUG_LOG("[END]"); return END; }
 
 {id}                        { DEBUG_LOG("[VAR : %s] ", yytext);
-                              yylval.id = (char*)strdup(yytext);
+                              yylval.sval = (char*)strdup(yytext);
                               return VAR; }
 
 {line_comment}              { DEBUG_LOG("[COMMENT + SEPARATOR] \n"); /* return SEPARATOR; */ }

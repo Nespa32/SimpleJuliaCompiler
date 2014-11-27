@@ -44,10 +44,9 @@ int __parser_debug__ = 1; /* toggle for debug prints*/
 %token <ival> BOOL
 %token <ival> INTEGER
 %token <fval> FLOAT
-%token <sval> STRING
+%token <sval> STRING VAR
 %token <node> SEPARATOR IF WHILE ELSEIF ELSE END
 %token PRINTLN
-%token <id> VAR
 %token '=' ';'
 %token '+' '-' '*' '/'
 %token '>' '<'
@@ -92,6 +91,14 @@ exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
                                   $$ = make_node(FLOAT, NULL, NULL);
                                   $$->data.fval = yylval.fval;}
 
+    | VAR                       { DEBUG_LOG("Reduce [VAR] to [exp]\n");
+                                  $$ = make_node(VAR, NULL, NULL);
+                                  $$->data.sval = yylval.sval; }
+                                  
+    | STRING                    { DEBUG_LOG("Reduce [STRING] to [exp]\n");
+                                  $$ = make_node(STRING, NULL, NULL);
+                                  $$->data.sval = yylval.sval; }   
+
     | exp op exp                { DEBUG_LOG("Reduce [exp op exp] to [exp]\n");
                                   if ($1->type != $3->type) {
                                     DEBUG_LOG("ERROR: type mismatch (1) \n");
@@ -103,11 +110,13 @@ exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
                                   $$ = $2; }
     
     | exp '=' exp               { DEBUG_LOG("Reduce [exp '=' exp] to [exp]\n");
-                                  if ($1->type != $3->type) {
-                                    DEBUG_LOG("ERROR: type mismatch (1) \n");
+                                  if ($1->type != VAR) {
+                                    DEBUG_LOG("ERROR: type mismatch (trying to assign something to a constant?) \n");
                                     YYERROR;
                                   }
-                                  $$ = make_node($1->type, $1, $3); }
+                                  
+                                  put_symbol($1->data.sval, $3->type);
+                                  $$ = make_node(0 /* @todo: give proper type */, $1, $3); }
 ;
 
 op: '+' | '-' | '*' | '/' | '>' | '<'
@@ -162,6 +171,19 @@ int yyerror(char *s) {
 
 int spaces = 0;
 
+const char* strForType(int type)
+{
+    switch (type)
+    {
+        case INTEGER: return "INTEGER";
+        case FLOAT: return "FLOAT";
+        case STRING: return "STRING";
+        case VAR: return "VAR";
+        default: return "UNK";
+    }
+    return "UNK"; // shitty compilers (like this one) might complain
+}
+
 void print_tree(parse_node* node)
 {
     if (node == NULL)
@@ -175,34 +197,28 @@ void print_tree(parse_node* node)
     parse_node* right = node->right;
     parse_node* next = node->next;
     
-    char* typeStr;
     char valStr[20];
     switch (node->type)
     {
         case INTEGER:
-            typeStr = "INTEGER";
             sprintf(valStr, "%d", node->data.ival);
             break;
         case FLOAT:
-            typeStr = "FLOAT";
             sprintf(valStr, "%f", node->data.fval);
             break;
         case STRING:
-            typeStr = "STRING";
             sprintf(valStr, "%s", node->data.sval);
             break;
         case VAR:
-            typeStr = "VAR";
             sprintf(valStr, "%s", node->data.sval);
             break;
         default:
-            typeStr = "UNK";
             sprintf(valStr, "None");
             break;
     }
 
     printf(" [Node] Type: %s, Val: %s, Left: %s, Right: %s, Next: %s\n",
-        typeStr,
+        strForType(node->type),
         valStr,
         left ? "Yes" : "No",
         right ? "Yes" : "No",
@@ -215,6 +231,18 @@ void print_tree(parse_node* node)
     --spaces;
 }
 
+void print_symbol_table()
+{
+    printf("-- Symbol Table - Start --\n");
+    symbol_entry* ptr = symtable;
+    while (ptr != NULL)
+    {
+        printf("Symbol - name: %s, type: %s\n", ptr->name, strForType(ptr->type));
+        ptr = ptr->next;
+    }
+    printf("-- Symbol Table - End --\n");
+}
+
 int main() {
     int result = yyparse();
     if (result == 0)
@@ -223,6 +251,15 @@ int main() {
         fprintf(stderr, "Parser: Error (%d).\n", result);
      
     print_tree(root);
-    free_parse_node(root); // delete the whole tree structure
+    print_symbol_table();
+    
+    // free up stuff
+    free_parse_node(root); // delete the whole tree structure    
+    while (symtable  != NULL)
+    {
+        symbol_entry* ptr = symtable->next;
+        free(symtable);
+        symtable = ptr;
+    }
     return 0;
 }

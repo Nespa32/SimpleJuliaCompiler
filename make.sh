@@ -1,5 +1,4 @@
 #!/bin/sh
-# ./make [1], if 1 is present only the lexer will be built/linked
 # @todo: replace with a proper make file?
 
 set +e # stop on error

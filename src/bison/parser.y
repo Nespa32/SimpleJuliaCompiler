@@ -6,12 +6,24 @@
 #include "../symbol_table.h"
 #include "../parse_node.h"
 
-/* type of $$ in semantic actions */
-// #define YYSTYPE parse_node*
+/* suppress some compiler warnings */
+int yylex();
+int yyerror(char *s);
+
+parse_node* make_node(int type, parse_node* left, parse_node* right)
+{
+    parse_node* node = alloc_parse_node();
+    node->type = type;
+    node->left = left;
+    node->right = right;
+    return node;
+}
 
 /* @todo:
 - else if chaining returns a parse error
 */
+
+%}
 
 %union {
     char* id; /* identifiers */
@@ -30,56 +42,102 @@
 %token <id> VAR
 %token '=' ';'
 %token '+' '-' '*' '/'
+%token '>' '<'
 %token '(' ')'
 
+%left '>' '<'
 %left '+' '-'
 %left '*' '/'
 %left '!'
 %left '='
 
+%type<node> comm_list command if_exp while_exp exp exp_list elseif_list elseif_block else_block
+
 %start program
 %%
 
-program: /* empty */
-       | program command        { printf("[program : program command] "); }
-       | program command SEPARATOR { printf("[program : program command SEPARATOR] "); }
+program : comm_list             { root = $1; }
 ;
 
-command : exp                   { printf("[command : exp] "); }
-        | if_exp                { printf("[command : if_exp] "); }
-        | while_exp             { printf("[command : while_exp] "); }    
+comm_list : command             { printf("Reduce [command] to [comm_list]\n");
+                                  $$ = $1; }
+
+        | command comm_list     { printf("Reduce [command comm_list] to [comm_list]\n"); 
+                                  $$ = make_node(0 /* @todo: give proper type */, $1, $2); }
 ;
 
-exp: INTEGER                    { printf("[exp : INTEGER] ");
-                                  $$.node = (parse_node*)malloc(sizeof(parse_node)); 
-                                  $$.node->type = INTEGER; }
-    | FLOAT                     { printf("[exp : FLOAT] "); }
-    | exp op exp                { printf("[exp : exp op exp] "); }
-    | '(' exp ')'               { printf("[exp : '(' exp ')'] "); }
-    | exp '=' exp               { printf("[exp : exp '=' exp] "); }
+command : if_exp                { printf("Reduce [if_exp] to [command]\n");
+                                  $$ = $1; }
+
+        | while_exp             { printf("Reduce [while_exp] to [command]\n");
+                                  $$ = $1; }
+
+        | exp                   { printf("Reduce [exp] to [command]\n");
+                                  $$ = $1; }
+;
+
+exp: INTEGER                    { printf("Reduce [INTEGER] to [exp]\n");
+                                  $$ = make_node(INTEGER, NULL, NULL); }
+
+    | FLOAT                     { printf("Reduce [FLOAT] to [exp]\n");
+                                  $$ = make_node(FLOAT, NULL, NULL); }
+
+    | exp op exp                { printf("Reduce [exp op exp] to [exp]\n");
+                                  if ($1->type != $3->type) {
+                                    printf("ERROR: type mismatch (1) \n");
+                                    YYERROR;
+                                  }
+                                  $$ = make_node($1->type, $1, $3); }
+
+    | '(' exp ')'               { printf("Reduce ['(' exp ')'] to [exp]\n");
+                                  $$ = $2; }
+    
+    | exp '=' exp               { printf("Reduce [exp '=' exp] to [exp]\n");
+                                  if ($1->type != $3->type) {
+                                    printf("ERROR: type mismatch (1) \n");
+                                    YYERROR;
+                                  }
+                                  $$ = make_node($1->type, $1, $3); }
 ;
 
 op: '+' | '-' | '*' | '/' | '>' | '<'
 ;
 
-if_exp: IF exp SEPARATOR exp_list elseif_list else_block END          { printf("[if_exp  ] "); }    
+if_exp: IF exp exp_list elseif_list else_block END      { printf("Reduce [IF exp exp_list elseif_list else_block END] to [if_exp]\n");
+                                                          /* if ($2->type != BOOL) {
+                                                            printf("ERROR: type mismatch (1) \n");
+                                                            YYERROR;
+                                                          } */
+                                                        
+                                                          $$ = make_node(0 /* @todo: give proper type */, $2, $3);
+                                                          $$->next = make_node(0 /* @todo: give proper type */, $4, $5); }
 ;
 
-while_exp: WHILE exp SEPARATOR exp_list END
+while_exp: WHILE exp exp_list END                       { printf("Reduce [IF exp exp_list elseif_list else_block END] to [if_exp]\n");
+                                                          /* if ($2->type != BOOL) {
+                                                            printf("ERROR: type mismatch (1) \n");
+                                                            YYERROR;
+                                                          } */
+                                                          
+                                                          $$ = make_node(0 /* @todo: give proper type */, $2, $3); }
 ;
 
-elseif_list: /* empty */
-            elseif_list elseif_block
+elseif_list: /* empty */                { $$ = NULL; }            
+           | elseif_list elseif_block   { $$ = make_node(0 /* @todo: give proper type */, $1, $2); }
+;
             
-elseif_block: ELSEIF exp SEPARATOR exp_list     { printf("[elseif_block 2] "); }
+elseif_block: ELSEIF exp exp_list       { $$ = make_node(0 /* @todo: give proper type */, $2, $3); }
 ;
 
-else_block: /* empty */
-    | ELSE SEPARATOR exp_list
+else_block: /* empty */                 { $$ = NULL; }
+    | ELSE exp_list                     { $$ = $2; }
 ;
 
-exp_list: exp SEPARATOR         { printf("[exp_list : exp SEPARATOR] "); }
-    | exp SEPARATOR exp_list    { printf("[exp_list : exp SEPARATOR exp_list] "); }              
+exp_list: exp                           { printf("Reduce [exp] to [exp_list]\n");
+                                          $$ = $1; }
+
+    | exp_list exp                      { printf("Reduce [exp_list exp] to [exp_list]\n");
+                                          $$ = make_node(0 /* @todo: give proper type */, $1, $2); }
 ;
 
 %%

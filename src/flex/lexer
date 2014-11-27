@@ -2,7 +2,8 @@
 %{
 #include <stdlib.h>
 
-// needed for token enum
+#include "../parse_node.h"
+/* needed for token enum */
 #include "../bison/parser.tab.h"
 
 %}

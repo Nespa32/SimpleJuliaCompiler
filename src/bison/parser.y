@@ -31,6 +31,21 @@ int __parser_debug__ = 1; /* toggle for debug prints*/
 - else if chaining returns a parse error
 */
 
+enum {
+    TYPE_NONE,
+    TYPE_VAR, /* @todo: move this somewhere ? */
+    TYPE_INTEGER,
+    TYPE_FLOAT,
+    TYPE_STRING,
+    TYPE_OP,
+    TYPE_ASSIGN,
+    TYPE_IF,
+    TYPE_WHILE,
+    TYPE_ELSEIF,
+    TYPE_ELSE,
+    TYPE_OTHER,
+};
+
 %}
 
 %union {
@@ -70,7 +85,7 @@ comm_list : command             { DEBUG_LOG("Reduce [command] to [comm_list]\n")
                                   $$ = $1; }
 
         | command comm_list     { DEBUG_LOG("Reduce [command comm_list] to [comm_list]\n"); 
-                                  $$ = make_node(0 /* @todo: give proper type */, $1, $2); }
+                                  $$ = make_node(TYPE_OTHER, $1, $2); }
 ;
 
 command : if_exp                { DEBUG_LOG("Reduce [if_exp] to [command]\n");
@@ -84,19 +99,19 @@ command : if_exp                { DEBUG_LOG("Reduce [if_exp] to [command]\n");
 ;
 
 exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
-                                  $$ = make_node(INTEGER, NULL, NULL);
+                                  $$ = make_node(TYPE_INTEGER, NULL, NULL);
                                   $$->data.ival = yylval.ival; }
 
     | FLOAT                     { DEBUG_LOG("Reduce [FLOAT] to [exp]\n");
-                                  $$ = make_node(FLOAT, NULL, NULL);
+                                  $$ = make_node(TYPE_FLOAT, NULL, NULL);
                                   $$->data.fval = yylval.fval;}
 
     | VAR                       { DEBUG_LOG("Reduce [VAR] to [exp]\n");
-                                  $$ = make_node(VAR, NULL, NULL);
+                                  $$ = make_node(TYPE_VAR, NULL, NULL);
                                   $$->data.sval = yylval.sval; }
                                   
     | STRING                    { DEBUG_LOG("Reduce [STRING] to [exp]\n");
-                                  $$ = make_node(STRING, NULL, NULL);
+                                  $$ = make_node(TYPE_STRING, NULL, NULL);
                                   $$->data.sval = yylval.sval; }   
 
     | exp op exp                { DEBUG_LOG("Reduce [exp op exp] to [exp]\n");
@@ -104,19 +119,19 @@ exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
                                     DEBUG_LOG("ERROR: type mismatch (1) \n");
                                     YYERROR;
                                   }
-                                  $$ = make_node($1->type, $1, $3); }
+                                  $$ = make_node(TYPE_OP, $1, $3); }
 
     | '(' exp ')'               { DEBUG_LOG("Reduce ['(' exp ')'] to [exp]\n");
                                   $$ = $2; }
     
     | exp '=' exp               { DEBUG_LOG("Reduce [exp '=' exp] to [exp]\n");
-                                  if ($1->type != VAR) {
+                                  if ($1->type != TYPE_VAR) {
                                     DEBUG_LOG("ERROR: type mismatch (trying to assign something to a constant?) \n");
                                     YYERROR;
                                   }
                                   
                                   put_symbol($1->data.sval, $3->type);
-                                  $$ = make_node(0 /* @todo: give proper type */, $1, $3); }
+                                  $$ = make_node(TYPE_ASSIGN, $1, $3); }
 ;
 
 op: '+' | '-' | '*' | '/' | '>' | '<'
@@ -128,8 +143,8 @@ if_exp: IF exp exp_list elseif_list else_block END      { DEBUG_LOG("Reduce [IF 
                                                             YYERROR;
                                                           } */
                                                         
-                                                          $$ = make_node(0 /* @todo: give proper type */, $2, $3);
-                                                          $$->next = make_node(0 /* @todo: give proper type */, $4, $5); }
+                                                          $$ = make_node(TYPE_IF, $2, $3);
+                                                          $$->next = make_node(TYPE_OTHER, $4, $5); }
 ;
 
 while_exp: WHILE exp exp_list END                       { DEBUG_LOG("Reduce [IF exp exp_list elseif_list else_block END] to [if_exp]\n");
@@ -138,25 +153,25 @@ while_exp: WHILE exp exp_list END                       { DEBUG_LOG("Reduce [IF 
                                                             YYERROR;
                                                           } */
                                                           
-                                                          $$ = make_node(0 /* @todo: give proper type */, $2, $3); }
+                                                          $$ = make_node(TYPE_WHILE, $2, $3); }
 ;
 
 elseif_list: /* empty */                { $$ = NULL; }            
-           | elseif_list elseif_block   { $$ = make_node(0 /* @todo: give proper type */, $1, $2); }
+           | elseif_list elseif_block   { $$ = make_node(TYPE_OTHER, $1, $2); }
 ;
             
-elseif_block: ELSEIF exp exp_list       { $$ = make_node(0 /* @todo: give proper type */, $2, $3); }
+elseif_block: ELSEIF exp exp_list       { $$ = make_node(TYPE_ELSEIF, $2, $3); }
 ;
 
 else_block: /* empty */                 { $$ = NULL; }
-    | ELSE exp_list                     { $$ = $2; }
+    | ELSE exp_list                     { $$ = make_node(TYPE_ELSE, $2, NULL); }
 ;
 
 exp_list: exp                           { DEBUG_LOG("Reduce [exp] to [exp_list]\n");
                                           $$ = $1; }
 
     | exp_list sep exp                  { DEBUG_LOG("Reduce [exp_list exp] to [exp_list]\n");
-                                          $$ = make_node(0 /* @todo: give proper type */, $1, $3); }
+                                          $$ = make_node(TYPE_OTHER, $1, $3); }
 ;
 
 sep : /* empty */                       { }
@@ -175,13 +190,19 @@ const char* strForType(int type)
 {
     switch (type)
     {
-        case INTEGER: return "INTEGER";
-        case FLOAT: return "FLOAT";
-        case STRING: return "STRING";
-        case VAR: return "VAR";
-        default: return "UNK";
+        case TYPE_VAR: return "TYPE_VAR";
+        case TYPE_INTEGER: return "TYPE_INTEGER";
+        case TYPE_FLOAT: return "TYPE_FLOAT";
+        case TYPE_STRING: return "TYPE_STRING";
+        case TYPE_OP: return "TYPE_OP";
+        case TYPE_ASSIGN: return "TYPE_ASSIGN";
+        case TYPE_IF: return "TYPE_IF";
+        case TYPE_WHILE: return "TYPE_WHILE";
+        case TYPE_ELSEIF: return "TYPE_ELSEIF";
+        case TYPE_ELSE: return "TYPE_ELSE";
+        case TYPE_OTHER: return "TYPE_OTHER";
     }
-    return "UNK"; // shitty compilers (like this one) might complain
+    return TYPE_NONE; // shitty compilers (like this one) might complain
 }
 
 void print_tree(parse_node* node)
@@ -200,18 +221,23 @@ void print_tree(parse_node* node)
     char valStr[20];
     switch (node->type)
     {
-        case INTEGER:
+        case TYPE_VAR:
+        case TYPE_STRING:
+            sprintf(valStr, "%s", node->data.sval);
+            break;
+        case TYPE_INTEGER:
             sprintf(valStr, "%d", node->data.ival);
             break;
-        case FLOAT:
+        case TYPE_FLOAT:
             sprintf(valStr, "%f", node->data.fval);
             break;
-        case STRING:
-            sprintf(valStr, "%s", node->data.sval);
-            break;
-        case VAR:
-            sprintf(valStr, "%s", node->data.sval);
-            break;
+        case TYPE_OP:
+        case TYPE_ASSIGN:
+        case TYPE_IF:
+        case TYPE_WHILE:
+        case TYPE_ELSEIF:
+        case TYPE_ELSE:
+        case TYPE_OTHER:
         default:
             sprintf(valStr, "None");
             break;
@@ -241,6 +267,27 @@ void print_symbol_table()
         ptr = ptr->next;
     }
     printf("-- Symbol Table - End --\n");
+}
+
+// possibly return a variable type
+void compile(parse_node* node)
+{
+    switch (node->type)
+    {
+        case TYPE_VAR:
+        case TYPE_INTEGER:
+        case TYPE_FLOAT:
+        case TYPE_STRING:
+        case TYPE_OP:
+        case TYPE_ASSIGN:
+        case TYPE_IF:
+        case TYPE_WHILE:
+        case TYPE_ELSEIF:
+        case TYPE_ELSE:
+        case TYPE_OTHER:
+        default:
+            break;
+    }
 }
 
 int main() {

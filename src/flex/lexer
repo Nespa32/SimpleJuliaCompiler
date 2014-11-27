@@ -6,11 +6,11 @@
 /* needed for token enum */
 #include "../bison/parser.tab.h"
 
-int __parser_debug__ = 1; /* toggle for debug prints*/
+int __lexer_debug__ = 0; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
-        if (__parser_debug__  != 0)     \
+        if (__lexer_debug__  != 0)     \
             printf(__VA_ARGS__);        \
     } while (0)
 

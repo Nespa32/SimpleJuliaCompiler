@@ -1,13 +1,13 @@
 
-struct parser_node
+struct parse_node
 {
     /* values */
     int type;
     
-    struct parser_node* left;
-    struct parser_node* right;
+    struct parse_node* left;
+    struct parse_node* right;
 };
 
-typedef struct parser_node parser_node;
+typedef struct parse_node parse_node;
 
-extern parser_node* root;
+extern parse_node* root;

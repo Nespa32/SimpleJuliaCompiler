@@ -2,5 +2,5 @@
 #include "parse_node.h"
 
 // global variable
-parser_node* root = (parser_node*)0;
+parse_node* root = (parse_node*)0;
 

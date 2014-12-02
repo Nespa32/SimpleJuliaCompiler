@@ -33,7 +33,7 @@ int __parser_debug__ = 1; /* toggle for debug prints*/
 
 enum {
     TYPE_NONE,
-    TYPE_VAR, /* @todo: move this somewhere ? */
+    TYPE_VAR,
     TYPE_INTEGER,
     TYPE_FLOAT,
     TYPE_STRING,
@@ -73,7 +73,7 @@ enum {
 %left '!'
 %left '='
 
-%type<node> comm_list command if_exp while_exp exp exp_list elseif_list elseif_block else_block
+%type<node> comm_list command if_comm while_comm var exp elseif_list elseif_block else_block
 
 %start program
 %%
@@ -88,14 +88,15 @@ comm_list : command             { DEBUG_LOG("Reduce [command] to [comm_list]\n")
                                   $$ = make_node(TYPE_OTHER, $1, $2); }
 ;
 
-command : if_exp                { DEBUG_LOG("Reduce [if_exp] to [command]\n");
+command : if_comm               { DEBUG_LOG("Reduce [if_comm] to [command]\n");
                                   $$ = $1; }
 
-        | while_exp             { DEBUG_LOG("Reduce [while_exp] to [command]\n");
+        | while_comm            { DEBUG_LOG("Reduce [while_comm] to [command]\n");
                                   $$ = $1; }
 
-        | exp                   { DEBUG_LOG("Reduce [exp] to [command]\n");
-                                  $$ = $1; }
+        | var '=' exp           { DEBUG_LOG("Reduce [var '=' exp] to [command]\n");
+                                  put_symbol($1->data.sval, $3->type);
+                                  $$ = make_node(TYPE_ASSIGN, $1, $3); }
 ;
 
 exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
@@ -106,9 +107,7 @@ exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
                                   $$ = make_node(TYPE_FLOAT, NULL, NULL);
                                   $$->data.fval = yylval.fval;}
 
-    | VAR                       { DEBUG_LOG("Reduce [VAR] to [exp]\n");
-                                  $$ = make_node(TYPE_VAR, NULL, NULL);
-                                  $$->data.sval = yylval.sval; }
+    | var
                                   
     | STRING                    { DEBUG_LOG("Reduce [STRING] to [exp]\n");
                                   $$ = make_node(TYPE_STRING, NULL, NULL);
@@ -123,21 +122,16 @@ exp: INTEGER                    { DEBUG_LOG("Reduce [INTEGER] to [exp]\n");
 
     | '(' exp ')'               { DEBUG_LOG("Reduce ['(' exp ')'] to [exp]\n");
                                   $$ = $2; }
-    
-    | exp '=' exp               { DEBUG_LOG("Reduce [exp '=' exp] to [exp]\n");
-                                  if ($1->type != TYPE_VAR) {
-                                    DEBUG_LOG("ERROR: type mismatch (trying to assign something to a constant?) \n");
-                                    YYERROR;
-                                  }
-                                  
-                                  put_symbol($1->data.sval, $3->type);
-                                  $$ = make_node(TYPE_ASSIGN, $1, $3); }
 ;
 
 op: '+' | '-' | '*' | '/' | '>' | '<'
 ;
 
-if_exp: IF exp exp_list elseif_list else_block END      { DEBUG_LOG("Reduce [IF exp exp_list elseif_list else_block END] to [if_exp]\n");
+var: VAR                        { DEBUG_LOG("Reduce [VAR] to [var]\n");
+                                  $$ = make_node(TYPE_VAR, NULL, NULL);
+                                  $$->data.sval = yylval.sval; }
+
+if_comm: IF exp comm_list elseif_list else_block END    { DEBUG_LOG("Reduce [IF exp comm_list elseif_list else_block END] to [if_comm]\n");
                                                           /* if ($2->type != BOOL) {
                                                             DEBUG_LOG("ERROR: type mismatch (1) \n");
                                                             YYERROR;
@@ -147,7 +141,7 @@ if_exp: IF exp exp_list elseif_list else_block END      { DEBUG_LOG("Reduce [IF 
                                                           $$->next = make_node(TYPE_OTHER, $4, $5); }
 ;
 
-while_exp: WHILE exp exp_list END                       { DEBUG_LOG("Reduce [IF exp exp_list elseif_list else_block END] to [if_exp]\n");
+while_comm: WHILE exp comm_list END                     { DEBUG_LOG("Reduce [IF exp comm_list elseif_list else_block END] to [if_comm]\n");
                                                           /* if ($2->type != BOOL) {
                                                             DEBUG_LOG("ERROR: type mismatch (1) \n");
                                                             YYERROR;
@@ -160,22 +154,12 @@ elseif_list: /* empty */                { $$ = NULL; }
            | elseif_list elseif_block   { $$ = make_node(TYPE_OTHER, $1, $2); }
 ;
             
-elseif_block: ELSEIF exp exp_list       { $$ = make_node(TYPE_ELSEIF, $2, $3); }
+elseif_block: ELSEIF exp comm_list      { $$ = make_node(TYPE_ELSEIF, $2, $3); }
 ;
 
 else_block: /* empty */                 { $$ = NULL; }
-    | ELSE exp_list                     { $$ = make_node(TYPE_ELSE, $2, NULL); }
+    | ELSE comm_list                    { $$ = make_node(TYPE_ELSE, $2, NULL); }
 ;
-
-exp_list: exp                           { DEBUG_LOG("Reduce [exp] to [exp_list]\n");
-                                          $$ = $1; }
-
-    | exp_list sep exp                  { DEBUG_LOG("Reduce [exp_list exp] to [exp_list]\n");
-                                          $$ = make_node(TYPE_OTHER, $1, $3); }
-;
-
-sep : /* empty */                       { }
-    | SEPARATOR
 
 %%
 
@@ -269,6 +253,19 @@ void print_symbol_table()
     printf("-- Symbol Table - End --\n");
 }
 
+int var_num = 0;
+
+// @todo
+struct Code
+{
+    int op;
+    int dest;
+    int val1;
+    int val2;
+};
+
+typedef struct Code Code;
+
 // possibly return a variable type
 void compile(parse_node* node)
 {
@@ -290,6 +287,12 @@ void compile(parse_node* node)
     }
 }
 
+// return number of the variable that contains the result
+int compile_exp(parse_node* node)
+{
+
+}
+
 int main() {
     int result = yyparse();
     if (result == 0)
@@ -299,6 +302,8 @@ int main() {
      
     print_tree(root);
     print_symbol_table();
+    
+    compile(root);
     
     // free up stuff
     free_parse_node(root); // delete the whole tree structure    

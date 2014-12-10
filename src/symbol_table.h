@@ -3,6 +3,7 @@ struct symbol_entry
 {
     char* name;
     int type;
+    int _register;
     struct symbol_entry* next;
 };
 

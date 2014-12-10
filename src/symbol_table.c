@@ -13,6 +13,7 @@ symbol_entry* put_symbol(char* symname, int type)
     ptr = (symbol_entry*)malloc(sizeof(symbol_entry));
     ptr->name = strdup(symname);
     ptr->type = type;
+    ptr->_register = -1;
     ptr->next = (symbol_entry*)symtable;
     symtable = ptr;
     return ptr;

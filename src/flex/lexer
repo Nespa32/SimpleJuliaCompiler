@@ -31,40 +31,72 @@ string          {double_quote}.+{double_quote}
 
 {white}                     { /* eat up whitespace */ }
 
-{integer}                   { DEBUG_LOG("[INTEGER : %s] ", yytext);
+{integer}                   { DEBUG_LOG("[TOKEN_INTEGER : %s] ", yytext);
                               yylval.ival = atoi(yytext);
-                              return INTEGER; }
+                              return TOKEN_INTEGER; }
                                 
-{real}                      { DEBUG_LOG("[FLOAT : %s] ", yytext);
+{real}                      { DEBUG_LOG("[TOKEN_FLOAT : %s] ", yytext);
                               yylval.fval = atof(yytext);
-                              return FLOAT; }
-    
-"!"|"+"|"-"|"*"|"/"         { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
-">"|"<"|"="                 { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
-"("|")"                     { DEBUG_LOG("[%c] ", yytext[0]); return yytext[0]; }
+                              return TOKEN_FLOAT; }
 
-"\n"|";"                    { DEBUG_LOG("[SEPARATOR] \n"); /* return SEPARATOR; */ }
+"!"                         { DEBUG_LOG("[TOKEN_NEG]");
+                              return TOKEN_NEG; }
 
-">="|"<="|"!="|"=="         { DEBUG_LOG("[KEYWORD : %s] ", yytext); /* return @todo */ }
-"if"                        { DEBUG_LOG("[IF]"); return IF; }
-"while"                     { DEBUG_LOG("[WHILE]"); return WHILE; }
-"elseif"                    { DEBUG_LOG("[ELSEIF]"); return ELSEIF; }
-"else"                      { DEBUG_LOG("[ELSE]"); return ELSE; }
-"end"                       { DEBUG_LOG("[END]"); return END; }
+"+"                         { DEBUG_LOG("[TOKEN_PLUS]");
+                              return TOKEN_PLUS; }
 
-{id}                        { DEBUG_LOG("[VAR : %s] ", yytext);
+"-"                         { DEBUG_LOG("[TOKEN_MINUS]");
+                              return TOKEN_MINUS; }
+
+"*"                         { DEBUG_LOG("[TOKEN_MUL]");
+                              return TOKEN_MUL; }
+
+"/"                         { DEBUG_LOG("[TOKEN_SUB]");
+                              return TOKEN_SUB; }
+
+">"                         { DEBUG_LOG("[TOKEN_GT]");
+                              return TOKEN_GT; }
+
+"<"                         { DEBUG_LOG("[TOKEN_LT]");
+                              return TOKEN_LT; }
+
+"="                         { DEBUG_LOG("[TOKEN_ASSIGN]");
+                              return TOKEN_ASSIGN; }
+
+">="                        { DEBUG_LOG("[TOKEN_GE]");
+                              return TOKEN_GE; }
+
+"<="                        { DEBUG_LOG("[TOKEN_LE]");
+                              return TOKEN_LE; }
+
+"!="                        { DEBUG_LOG("[TOKEN_NE]");
+                              return TOKEN_NE; }
+
+"=="                        { DEBUG_LOG("[TOKEN_EQ]");
+                              return TOKEN_EQ; }
+
+"("|")"                     { DEBUG_LOG("[%c] ", yytext[0]);
+                              return yytext[0]; }
+
+"\n"|";"                    { DEBUG_LOG("[TOKEN_SEPARATOR] \n"); /* return TOKEN_SEPARATOR; */ }
+
+"if"                        { DEBUG_LOG("[TOKEN_IF]"); return TOKEN_IF; }
+"while"                     { DEBUG_LOG("[TOKEN_WHILE]"); return TOKEN_WHILE; }
+"elseif"                    { DEBUG_LOG("[TOKEN_ELSEIF]"); return TOKEN_ELSEIF; }
+"else"                      { DEBUG_LOG("[TOKEN_ELSE]"); return TOKEN_ELSE; }
+"end"                       { DEBUG_LOG("[TOKEN_END]"); return TOKEN_END; }
+
+{id}                        { DEBUG_LOG("[TOKEN_VAR : %s] ", yytext);
                               yylval.sval = (char*)strdup(yytext);
-                              return VAR; }
+                              return TOKEN_VAR; }
 
-{line_comment}              { DEBUG_LOG("[COMMENT + SEPARATOR] \n"); /* return SEPARATOR; */ }
+{line_comment}              { DEBUG_LOG("[TOKEN_COMMENT + TOKEN_SEPARATOR] \n"); /* return TOKEN_SEPARATOR; */ }
 
-{string}                    { DEBUG_LOG("[STRING : %s]", yytext);
+{string}                    { /* DEBUG_LOG("[TOKEN_STRING : %s]", yytext);
                               yylval.sval = (char*)strdup(yytext);
-                              return STRING; }
+                              return TOKEN_STRING; */ }
 
 .                           { DEBUG_LOG("[UNK] "); }
 
 %%
-
-
 

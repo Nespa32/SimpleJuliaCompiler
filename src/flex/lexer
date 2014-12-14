@@ -6,12 +6,14 @@
 /* needed for token enum */
 #include "../bison/parser.tab.h"
 
-int __lexer_debug__ = 0; /* toggle for debug prints*/
+int __lexer_debug__ = 1; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
-        if (__lexer_debug__  != 0)      \
+        if (__lexer_debug__  != 0) {    \
             printf(__VA_ARGS__);        \
+            printf("\n");               \
+        }                               \
     } while (0)
 
 %}
@@ -78,7 +80,7 @@ string          {double_quote}.+{double_quote}
 "("|")"                     { DEBUG_LOG("[%c] ", yytext[0]);
                               return yytext[0]; }
 
-"\n"|";"                    { DEBUG_LOG("[TOKEN_SEPARATOR] \n"); /* return TOKEN_SEPARATOR; */ }
+"\n"|";"                    { DEBUG_LOG("[TOKEN_SEPARATOR]"); /* return TOKEN_SEPARATOR; */ }
 
 "if"                        { DEBUG_LOG("[TOKEN_IF]"); return TOKEN_IF; }
 "while"                     { DEBUG_LOG("[TOKEN_WHILE]"); return TOKEN_WHILE; }
@@ -86,17 +88,27 @@ string          {double_quote}.+{double_quote}
 "else"                      { DEBUG_LOG("[TOKEN_ELSE]"); return TOKEN_ELSE; }
 "end"                       { DEBUG_LOG("[TOKEN_END]"); return TOKEN_END; }
 
+"println"                   { DEBUG_LOG("[TOKEN_PRINTLN]"); return TOKEN_PRINTLN; }
+
+"true"                      { DEBUG_LOG("[TOKEN_TRUE]");
+                              yylval.ival = 1;
+                              return TOKEN_TRUE; }
+                              
+"false"                     { DEBUG_LOG("[TOKEN_FALSE]");
+                              yylval.ival = 0;
+                              return TOKEN_FALSE; }
+
 {id}                        { DEBUG_LOG("[TOKEN_VAR : %s] ", yytext);
                               yylval.sval = (char*)strdup(yytext);
                               return TOKEN_VAR; }
 
-{line_comment}              { DEBUG_LOG("[TOKEN_COMMENT + TOKEN_SEPARATOR] \n"); /* return TOKEN_SEPARATOR; */ }
+{line_comment}              { DEBUG_LOG("[TOKEN_COMMENT + TOKEN_SEPARATOR]"); /* return TOKEN_SEPARATOR; */ }
 
 {string}                    { /* DEBUG_LOG("[TOKEN_STRING : %s]", yytext);
                               yylval.sval = (char*)strdup(yytext);
                               return TOKEN_STRING; */ }
 
-.                           { DEBUG_LOG("[UNK] "); }
+.                           { DEBUG_LOG("[UNK]"); }
 
 %%
 

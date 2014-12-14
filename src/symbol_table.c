@@ -22,11 +22,11 @@ symbol_entry* put_symbol(char* symname, int type)
 symbol_entry* get_symbol(char* symname)
 {
     symbol_entry* ptr;
-    for (ptr = symtable; ptr != (symbol_entry*)0; ptr = ptr->next)
+    for (ptr = symtable; ptr != (symbol_entry*)NULL; ptr = ptr->next)
     {
         if (strcmp(ptr->name, symname) == 0)
             return ptr;
     }
 
-    return 0;
+    return NULL;
 }

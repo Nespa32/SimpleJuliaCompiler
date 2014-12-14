@@ -24,19 +24,18 @@ int __parser_debug__ = 1; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
-        if (__parser_debug__  != 0)     \
+        if (__parser_debug__  != 0) {   \
             printf(__VA_ARGS__);        \
+            printf("\n");               \
+        }                               \
     } while (0)
-
-/* @todo:
-- else if chaining returns a parse error
-*/
 
 enum {
     TYPE_NONE,
     TYPE_VAR,
     TYPE_INTEGER,
     TYPE_FLOAT,
+    TYPE_BOOL,
     TYPE_OP_ADD,
     TYPE_OP_SUB,
     TYPE_OP_MUL,
@@ -52,6 +51,7 @@ enum {
     TYPE_WHILE,
     TYPE_ELSEIF,
     TYPE_ELSE,
+    TYPE_PRINTLN,
     TYPE_CONNECTION_NODE, // compiles both 'left' and 'right' by default
 };
 
@@ -65,12 +65,11 @@ enum {
     parse_node* node; /* node for tree structure */
 }
 
-%token <ival> TOKEN_BOOL
+%token <ival> TOKEN_TRUE TOKEN_FALSE
 %token <ival> TOKEN_INTEGER
 %token <fval> TOKEN_FLOAT
 %token <sval> TOKEN_VAR
-%token <node> TOKEN_SEPARATOR TOKEN_IF TOKEN_WHILE TOKEN_ELSEIF TOKEN_ELSE TOKEN_END
-%token TOKEN_PRINTLN
+%token <node> TOKEN_PRINTLN TOKEN_SEPARATOR TOKEN_IF TOKEN_WHILE TOKEN_ELSEIF TOKEN_ELSE TOKEN_END
                               
 %token TOKEN_ASSIGN
 %token TOKEN_PLUS TOKEN_SUB TOKEN_MUL TOKEN_DIV
@@ -92,42 +91,86 @@ enum {
 program : comm_list             { root = $1; }
 ;
 
-comm_list : command             { DEBUG_LOG("Reduce [command] to [comm_list]\n");
+comm_list : command             { DEBUG_LOG("Reduce [command] to [comm_list]");
                                   $$ = $1; }
 
-        | command comm_list     { DEBUG_LOG("Reduce [command comm_list] to [comm_list]\n"); 
+        | command comm_list     { DEBUG_LOG("Reduce [command comm_list] to [comm_list]"); 
                                   $$ = make_node(TYPE_CONNECTION_NODE, $1, $2); }
 ;
 
-command : if_comm               { DEBUG_LOG("Reduce [if_comm] to [command]\n");
+command : if_comm               { DEBUG_LOG("Reduce [if_comm] to [command]");
+                                  $$ = $1; }
+                                  
+    | while_comm                { DEBUG_LOG("Reduce [while_comm] to [command]");
                                   $$ = $1; }
 
-        | while_comm            { DEBUG_LOG("Reduce [while_comm] to [command]\n");
-                                  $$ = $1; }
-
-        | var TOKEN_ASSIGN exp  { DEBUG_LOG("Reduce [var '=' exp] to [command]\n");
-                                  put_symbol($1->data.sval, $3->type);
+    | var TOKEN_ASSIGN exp      { DEBUG_LOG("Reduce [var '=' exp] to [command]");
+                                  if (get_symbol($1->data.sval) == NULL)
+                                    put_symbol($1->data.sval, $3->type);
+                                    
                                   $$ = make_node(TYPE_ASSIGN, $1, $3); }
+                                    
+    | TOKEN_PRINTLN '(' exp ')' { DEBUG_LOG("Reduce [TOKEN_PRINTLN '(' exp ')'] to [command]");
+                                  $$ = make_node(TYPE_PRINTLN, $3, NULL); }
 ;
 
-exp: TOKEN_INTEGER              { DEBUG_LOG("Reduce [TOKEN_INTEGER] to [exp]\n");
+exp: TOKEN_INTEGER              { DEBUG_LOG("Reduce [TOKEN_INTEGER] to [exp]");
                                   $$ = make_node(TYPE_INTEGER, NULL, NULL);
                                   $$->data.ival = yylval.ival; }
 
-    | TOKEN_FLOAT               { DEBUG_LOG("Reduce [TOKEN_FLOAT] to [exp]\n");
+    | TOKEN_FLOAT               { DEBUG_LOG("Reduce [TOKEN_FLOAT] to [exp]");
                                   $$ = make_node(TYPE_FLOAT, NULL, NULL);
                                   $$->data.fval = yylval.fval;}
+                                  
+    | bool                      { DEBUG_LOG("Reduce [bool] to [exp]");
+                                  $$ = make_node(TYPE_BOOL, NULL, NULL);
+                                  $$->data.ival = yylval.ival; }
 
     | var
 
-    | exp op exp                { DEBUG_LOG("Reduce [exp op exp] to [exp]\n");  
+    | exp op exp                { DEBUG_LOG("Reduce [exp op exp] to [exp]");  
                                   if ($1->type != $3->type) {
-                                    DEBUG_LOG("ERROR: type mismatch (1) \n");
+                                    DEBUG_LOG("ERROR: type mismatch - type of $1 is %d, type of $2 is %d\n", $1->type, $3->type);
                                     YYERROR;
                                   }
-                                  $$ = make_node($2, $1, $3); }
+                                  
+                                  int exp_type = $1->type;
+                                  switch ($2) /* op */
+                                  {
+                                    case TYPE_OP_ADD:
+                                    case TYPE_OP_SUB:
+                                    case TYPE_OP_MUL:
+                                    case TYPE_OP_DIV:
+                                        if (exp_type != TYPE_INTEGER && exp_type != TYPE_FLOAT) {
+                                            DEBUG_LOG("ERROR (1): bad type for op, type is %d\n", exp_type);
+                                            YYERROR;
+                                        }
+                                        break;
+                                    case TYPE_OP_GT:
+                                    case TYPE_OP_GE:
+                                    case TYPE_OP_LT:
+                                    case TYPE_OP_LE:
+                                        if (exp_type != TYPE_INTEGER && exp_type != TYPE_FLOAT) {
+                                            DEBUG_LOG("ERROR (2): bad type for op, type is %d\n", exp_type);
+                                            YYERROR;
+                                        }
+                                        
+                                        exp_type = TYPE_BOOL;
+                                        break;
+                                    case TYPE_OP_EQ:
+                                    case TYPE_OP_NE:
+                                        exp_type = TYPE_BOOL;
+                                        break;
+                                    default:
+                                        printf("Bad op type: %d", $2);
+                                        assert(0);
+                                        break;
+                                  }
+                                  
+                                  $$ = make_node(exp_type, $1, $3);
+                                  $$->op_type = $2; }
 
-    | '(' exp ')'               { DEBUG_LOG("Reduce ['(' exp ')'] to [exp]\n");
+    | '(' exp ')'               { DEBUG_LOG("Reduce ['(' exp ')'] to [exp]");
                                   $$ = $2; }
 ;
 
@@ -139,49 +182,72 @@ op: TOKEN_PLUS                  { $$ = TYPE_OP_ADD; }
     | TOKEN_LT                  { $$ = TYPE_OP_LT; }
     | TOKEN_GE                  { $$ = TYPE_OP_GE; }
     | TOKEN_LE                  { $$ = TYPE_OP_LE; }
+    | TOKEN_EQ                  { $$ = TYPE_OP_EQ; }
+    | TOKEN_NE                  { $$ = TYPE_OP_NE; }
 ;
 
-var: TOKEN_VAR                  { DEBUG_LOG("Reduce [TOKEN_VAR] to [var]\n");
+var: TOKEN_VAR                  { DEBUG_LOG("Reduce [TOKEN_VAR] to [var]");
                                   $$ = make_node(TYPE_VAR, NULL, NULL);
                                   $$->data.sval = yylval.sval; }
 
+bool: TOKEN_TRUE
+    | TOKEN_FALSE
+
 if_comm: TOKEN_IF exp comm_list elseif_list else_block TOKEN_END  { 
-                                                          DEBUG_LOG("Reduce [TOKEN_IF exp comm_list elseif_list else_block TOKEN_END] to [if_comm]\n");
-                                                          /* if ($2->type != BOOL) {
-                                                            DEBUG_LOG("ERROR: type mismatch (1) \n");
+                                                          DEBUG_LOG("Reduce [TOKEN_IF exp comm_list elseif_list else_block TOKEN_END] to [if_comm]");
+                                                          if ($2->type != TYPE_BOOL) {
+                                                            DEBUG_LOG("ERROR: type mismatch - type of $2 ($d) is not TYPE_BOOL", $2->type);
                                                             YYERROR;
-                                                          } */
+                                                          }
                                                         
                                                           $$ = make_node(TYPE_IF, $2, $3);
                                                           $$->next = ($4 != NULL) ? $4 : $5;
                                                           if ($4 != NULL) {
                                                             $$->next = $4; // elseif_list
-                                                            $4->next = $5; // else_block
+                                                            parse_node* temp = $4;
+                                                            while (temp->next != NULL)
+                                                                temp = temp->next; // goto end of the TYPE_ELSEIF node list
+                                                                
+                                                            temp = $5; // else_block
                                                           } else { // elseif_list is empty
                                                             $$->next = $5; // else_block
                                                           }
                                                         }
 ;
 
-while_comm: TOKEN_WHILE exp comm_list TOKEN_END         { DEBUG_LOG("Reduce [TOKEN_WHILE exp comm_list TOKEN_END] to [while_comm]\n");
-                                                          /* if ($2->type != BOOL) {
-                                                            DEBUG_LOG("ERROR: type mismatch (1) \n");
+while_comm: TOKEN_WHILE exp comm_list TOKEN_END         { DEBUG_LOG("Reduce [TOKEN_WHILE exp comm_list TOKEN_END] to [while_comm]");
+                                                          if ($2->type != TYPE_BOOL) {
+                                                            DEBUG_LOG("ERROR: type mismatch - type of $2 ($d) is not TYPE_BOOL", $2->type);
                                                             YYERROR;
-                                                          } */
+                                                          }
                                                           
                                                           $$ = make_node(TYPE_WHILE, $2, $3); }
 ;
 
-elseif_list: /* empty */                { $$ = NULL; }            
-           | elseif_block elseif_list   { $$ = $1;
-                                          $1->next = $2; }
+elseif_list: /* empty */                { DEBUG_LOG("Reduce [EMPTY] to [elseif_list]");
+                                          $$ = NULL; }
+                                          
+           | elseif_list elseif_block   { DEBUG_LOG("Reduce [elseif_list elseif_block] to [elseif_list]");
+                                          if ($1 == NULL) {
+                                            $$ = $2;
+                                          } else {
+                                            $$ = $1;
+                                            parse_node* temp = $$;
+                                            while (temp->next != NULL)
+                                                temp = temp->next; // goto end of the TYPE_ELSEIF node list
+                                                
+                                            temp->next = $2;
+                                          }
+                                        }
 ;
             
-elseif_block: TOKEN_ELSEIF exp comm_list    { $$ = make_node(TYPE_ELSEIF, $2, $3); }
+elseif_block: TOKEN_ELSEIF exp comm_list    { DEBUG_LOG("Reduce [TOKEN_ELSEIF exp comm_list] to [elseif_block]");
+                                              $$ = make_node(TYPE_ELSEIF, $2, $3); }
 ;
 
 else_block: /* empty */                 { $$ = NULL; }
-    | TOKEN_ELSE comm_list              { $$ = make_node(TYPE_ELSE, $2, NULL); }
+    | TOKEN_ELSE comm_list              { DEBUG_LOG("Reduce [TOKEN_ELSE comm_list] to [else_block]");
+                                          $$ = make_node(TYPE_ELSE, $2, NULL); }
 ;
 
 %%
@@ -191,7 +257,7 @@ int yyerror(char *s) {
     return 0;
 }
 
-int spaces = 0;
+int spaces = 1;
 
 const char* strForType(int type)
 {
@@ -200,6 +266,7 @@ const char* strForType(int type)
         case TYPE_VAR: return "TYPE_VAR";
         case TYPE_INTEGER: return "TYPE_INTEGER";
         case TYPE_FLOAT: return "TYPE_FLOAT";
+        case TYPE_BOOL: return "TYPE_BOOL";
         case TYPE_OP_ADD: return "TYPE_OP_ADD";
         case TYPE_OP_SUB: return "TYPE_OP_SUB";
         case TYPE_OP_MUL: return "TYPE_OP_MUL";
@@ -217,7 +284,8 @@ const char* strForType(int type)
         case TYPE_ELSE: return "TYPE_ELSE";
         case TYPE_CONNECTION_NODE: return "TYPE_CONNECTION_NODE";
     }
-    return TYPE_NONE; // shitty compilers (like this one) might complain
+
+    return "<undefined>"; // shitty compilers (like this one) might complain
 }
 
 void print_tree(parse_node* node)
@@ -276,8 +344,9 @@ void print_tree(parse_node* node)
     ++spaces;
     print_tree(left);
     print_tree(right);
-    print_tree(next);
     --spaces;
+    
+    print_tree(next);
 }
 
 void print_symbol_table()
@@ -296,15 +365,23 @@ int var_num = 0;
 
 typedef enum
 {
-    CODE_OP_ADD, // int add $dest $reg1 $reg2
-    CODE_OP_SUB, // int sub $dest $reg1 $reg2
-    CODE_OP_MUL, // int mult $dest $reg1 $reg2
-    CODE_OP_DIV, // int div $dest $reg1 $reg2
-    CODE_OP_BEQ, // bigger or equal than
+    CODE_OP_ASSIGN, // add $dest $reg1 $zero
+    CODE_OP_ADD, // add $dest $reg1 $reg2
+    CODE_OP_SUB, // sub $dest $reg1 $reg2
+    CODE_OP_MUL, // mult $dest $reg1 $reg2
+    CODE_OP_DIV, // div $dest $reg1 $reg2
+    CODE_OP_BEQ, // branch equal @todo: fixme, used in cases that need BGE
     CODE_OP_JUMP, // jump $label
     CODE_OP_LABEL, // label $name
     CODE_OP_LI, // load immediate integer $dest $value
     CODE_OP_SLT, // set less than $dest $reg1 $reg2
+    CODE_OP_SLE, // set less or equal than $dest $reg1 $reg2
+    CODE_OP_SEQ, // set equal $dest $reg1 $reg2
+    CODE_OP_SNE, // set not equal $dest $reg1 $reg2
+    CODE_PRINT_INTEGER,
+    CODE_PRINT_FLOAT,
+    CODE_PRINT_BOOL,
+    CODE_PRINT_NEWLINE,
 } CodeOpType;
 
 // @todo
@@ -349,6 +426,16 @@ int create_label()
     return label_counter++;
 }
 
+int register_counter = 0;
+
+int get_register_for_symbol(symbol_entry* sym)
+{
+    if (sym->_register == -1)
+        sym->_register = register_counter++;
+        
+    return sym->_register;
+}
+
 // possibly return a variable type
 void compile(parse_node* node)
 {
@@ -361,25 +448,10 @@ void compile(parse_node* node)
     int var1, var2; // for compile_exp use
     switch (node->type)
     {
-        case TYPE_VAR:
-        case TYPE_INTEGER:
-        case TYPE_FLOAT:
-        case TYPE_OP_ADD:
-        case TYPE_OP_SUB:
-        case TYPE_OP_MUL:
-        case TYPE_OP_DIV:
-        case TYPE_OP_GT:
-        case TYPE_OP_GE:
-        case TYPE_OP_LT:
-        case TYPE_OP_LE:
-        case TYPE_OP_EQ:
-        case TYPE_OP_NE:
-            // @todo: put assert here, this should never happen
-            break;
         case TYPE_ASSIGN: // left is VAR, right is exp
             var1 = compile_exp(left);
             var2 = compile_exp(right);
-            add_code(CODE_OP_ADD, var1, var2, 0); // add $var1 $var2 $zero
+            add_code(CODE_OP_ASSIGN, var1, var2, 0); // add $var1 $var2 $zero
             break;
         case TYPE_IF: // left: exp, right: comm_list, next for elseif/else blocks
         {
@@ -425,19 +497,68 @@ void compile(parse_node* node)
             compile(left);
             compile(right);
             break;
+        case TYPE_PRINTLN:
+            assert(right == NULL);
+            var1 = compile_exp(left);
+            switch (left->type)
+            {
+                case TYPE_VAR:
+                {
+                    symbol_entry* var_sym = get_symbol(left->data.sval);
+                    switch (var_sym->type)
+                    {
+                        case TYPE_INTEGER:
+                            add_code(CODE_PRINT_INTEGER, var1, 0, 0);
+                            break;
+                        case TYPE_FLOAT:
+                            add_code(CODE_PRINT_FLOAT, var1, 0, 0);
+                            break;
+                        case TYPE_BOOL:
+                            add_code(CODE_PRINT_BOOL, var1, 0, 0);
+                            break;
+                        default:
+                            printf("TYPE_VAR has incorrect op_type %d\n", left->op_type);
+                            assert(0);
+                            break;
+                    }
+                    
+                    break;
+                }
+                case TYPE_INTEGER:
+                    add_code(CODE_PRINT_INTEGER, var1, 0, 0);
+                    break;
+                case TYPE_FLOAT:
+                    add_code(CODE_PRINT_FLOAT, var1, 0, 0);
+                    break;
+                case TYPE_BOOL:
+                    add_code(CODE_PRINT_BOOL, var1, 0, 0);
+                    break;
+                default:
+                    printf("TYPE_PRINT has left child that with bad type\n");
+                    assert(0);
+                    break;
+            }
+            
+            add_code(CODE_PRINT_NEWLINE, 0, 0, 0);
+            break;
+        case TYPE_VAR:
+        case TYPE_INTEGER:
+        case TYPE_FLOAT:
+        case TYPE_BOOL:
+        case TYPE_OP_ADD:
+        case TYPE_OP_SUB:
+        case TYPE_OP_MUL:
+        case TYPE_OP_DIV:
+        case TYPE_OP_GT:
+        case TYPE_OP_GE:
+        case TYPE_OP_LT:
+        case TYPE_OP_LE:
+        case TYPE_OP_EQ:
+        case TYPE_OP_NE:
         default:
+            assert(0);
             break;
     }
-}
-
-int register_counter = 0;
-
-int get_register_for_symbol(symbol_entry* sym)
-{
-    if (sym->_register == -1)
-        sym->_register = register_counter++;
-        
-    return sym->_register;
 }
 
 // return number of the variable that contains the result
@@ -451,18 +572,30 @@ int compile_exp(parse_node* node)
     
     int var1, var2; // for compile_exp use
     symbol_entry* var_sym; // for variable use
-    switch (node->type)
+    switch (node->op_type)
     {
-        case TYPE_VAR: // need to use sval to get the variable pointer (or create it)
-            var_sym = get_symbol(node->data.sval);
-            // @todo: somehow get an existing variable from var_sym or make a new one if it doesn't exist
-            return get_register_for_symbol(var_sym);
-        case TYPE_INTEGER:
-            // make li $register $value
-            return register_counter++;
-        case TYPE_FLOAT:
-            // make li.s $register $value
-            return register_counter++;
+        case TYPE_NONE: // leaf value
+            switch (node->type)
+            {
+                case TYPE_VAR: // need to use sval to get the variable pointer (or create it)
+                    var_sym = get_symbol(node->data.sval);
+                    // @todo: somehow get an existing variable from var_sym or make a new one if it doesn't exist
+                    return get_register_for_symbol(var_sym);
+                case TYPE_INTEGER:
+                case TYPE_BOOL:
+                    // make li $register $value
+                    add_code(CODE_OP_LI, register_counter, node->data.ival, 0);
+                    return register_counter++;
+                case TYPE_FLOAT:
+                    // make li.s $register $value
+                    // add_code(CODE_OP_LI, register_counter, node->data.fval);
+                    return register_counter++;
+                default:
+                    printf("Bad node type: %d\n", node->type);
+                    assert(0);
+                    break;
+            }
+            break;
         case TYPE_OP_ADD:
         case TYPE_OP_SUB:
         case TYPE_OP_MUL:
@@ -475,12 +608,132 @@ int compile_exp(parse_node* node)
         case TYPE_OP_NE:
             var1 = compile_exp(left);
             var2 = compile_exp(right);
+            
+            switch (node->op_type)
+            {
+                case TYPE_OP_ADD:
+                    add_code(CODE_OP_ADD, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_SUB:
+                    add_code(CODE_OP_SUB, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_MUL:
+                    add_code(CODE_OP_MUL, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_DIV:
+                    add_code(CODE_OP_DIV, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_GT:
+                    add_code(CODE_OP_SLT, register_counter, var2, var1);
+                    break;
+                case TYPE_OP_GE:
+                    add_code(CODE_OP_SLE, register_counter, var2, var1);
+                    break;
+                case TYPE_OP_LT:
+                    add_code(CODE_OP_SLT, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_LE:
+                    add_code(CODE_OP_SLE, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_EQ:
+                    add_code(CODE_OP_SEQ, register_counter, var1, var2);
+                    break;
+                case TYPE_OP_NE:
+                    add_code(CODE_OP_SNE, register_counter, var1, var2);
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
+            
             return register_counter++;
         default:
+            assert(0);
             break;
     }
     
     return -1;
+}
+    
+void convert_code_to_mips()
+{
+    printf(".data\n");
+    // default strings
+    printf("__newline__:\t.asciiz\t\"\\n\"\n");
+    printf("__bool_true__:\t.asciiz\t\"true\"\n");
+    printf("__bool_false__:\t.asciiz\t\"false\"\n");
+    
+    printf(".text\n");
+    
+    Code* code = firstCode;
+    while (code != NULL)
+    {
+        switch (code->op)
+        {
+            case CODE_OP_ASSIGN:
+                printf("\tadd $t%u, $t%u, $zero\n", code->dest, code->val1);
+                break;
+            case CODE_OP_ADD:
+                printf("\tadd $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_SUB:
+                printf("\tsub $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_MUL:
+                printf("\tmul $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_DIV:
+                printf("\tdiv $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_BEQ:
+                printf("\tbeq $t%u, $zero, L%u\n", code->dest, code->val2);
+                break;
+            case CODE_OP_JUMP:
+                printf("\tj L%u\n", code->dest);
+                break;
+            case CODE_OP_LABEL:
+                printf("L%u:\n", code->dest);
+                break;
+            case CODE_OP_LI:
+                printf("\tli $t%u, %u\n", code->dest, code->val1);
+                break;
+            case CODE_OP_SLT:
+                printf("\tslt $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_SLE:
+                printf("\tsle $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_SEQ:
+                printf("\tseq $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_OP_SNE:
+                printf("\tsne $t%u, $t%u, $t%u\n", code->dest, code->val1, code->val2);
+                break;
+            case CODE_PRINT_INTEGER:
+                printf("\tli $v0, 1\n"); // print int code = 1
+                printf("\tadd $a0, $t%u, $zero\n", code->dest);
+                printf("\tsyscall\n");
+                break;
+            case CODE_PRINT_FLOAT:
+                printf("\tli $v0, 3\n"); // print double code = 3
+                printf("\tadd.d $f12, $f%u, $zero\n", code->dest);
+                printf("\tsyscall\n");
+                break;
+            case CODE_PRINT_BOOL:
+                break;
+            case CODE_PRINT_NEWLINE:
+                printf("\tli $v0, 4\n"); // print string code = 4
+                printf("\tla $a0, __newline__\n");
+                printf("\tsyscall\n");
+                break;
+            default:
+                printf("Code op %d can't be converted to MIPS\n", code->op);
+                assert(0);
+                break;
+        }
+        
+        code = code->next;
+    }
 }
 
 int main() {
@@ -488,12 +741,17 @@ int main() {
     if (result == 0)
         fprintf(stderr, "Parser: Success.\n");
     else
+    {
         fprintf(stderr, "Parser: Error (%d).\n", result);
+        return result;
+    }
      
-    print_tree(root);
-    print_symbol_table();
+    // print_tree(root);
+    // print_symbol_table();
     
     compile(root);
+    
+    convert_code_to_mips();
     
     // free up stuff
     free_parse_node(root); // delete the whole tree structure    

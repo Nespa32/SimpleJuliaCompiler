@@ -3,6 +3,8 @@ struct parse_node
 {
     /* values */
     int type;
+    int op_type;
+    
     union
     {
         char* sval;     /* strings */

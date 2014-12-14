@@ -9,6 +9,7 @@ parse_node* alloc_parse_node()
 {
     parse_node* node = (parse_node*)malloc(sizeof(parse_node));
     node->type = 0;
+    node->op_type = 0;
     node->left = NULL;
     node->right = NULL;
     node->next = NULL;

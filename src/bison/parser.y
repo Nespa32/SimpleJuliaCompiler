@@ -20,7 +20,7 @@ parse_node* make_node(int type, parse_node* left, parse_node* right)
     return node;
 }
 
-int __parser_debug__ = 1; /* toggle for debug prints*/
+int __parser_debug__ = 0; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
@@ -55,6 +55,52 @@ enum {
     TYPE_CONNECTION_NODE, // compiles both 'left' and 'right' by default
 };
 
+parse_node* make_op_node(parse_node* left, parse_node* right, int op_type)
+{   
+    if (left->type != right->type) {
+        printf("ERROR: type mismatch - type of $1 is %d, type of $2 is %d\n", left->type, right->type);
+        return NULL;
+    }
+    
+    int exp_type = left->type;
+    switch (op_type)
+    {
+        case TYPE_OP_ADD:
+        case TYPE_OP_SUB:
+        case TYPE_OP_MUL:
+        case TYPE_OP_DIV:
+            if (exp_type != TYPE_INTEGER && exp_type != TYPE_FLOAT) {
+                DEBUG_LOG("ERROR (1): bad type for op, type is %d\n", exp_type);
+                return NULL;
+            }
+            
+            break;
+        case TYPE_OP_GT:
+        case TYPE_OP_GE:
+        case TYPE_OP_LT:
+        case TYPE_OP_LE:
+            if (exp_type != TYPE_INTEGER && exp_type != TYPE_FLOAT) {
+                DEBUG_LOG("ERROR (2): bad type for op, type is %d\n", exp_type);
+                return NULL;
+            }
+            
+            exp_type = TYPE_BOOL;
+            break;
+        case TYPE_OP_EQ:
+        case TYPE_OP_NE:
+            exp_type = TYPE_BOOL;
+            break;
+        default:
+            printf("Bad op type: %d", op_type);
+            assert(0);
+            break;
+    }
+    
+    parse_node* node = make_node(exp_type, left, right);
+    node->op_type = op_type;
+    return node;
+}
+
 %}
 
 %union {
@@ -72,18 +118,14 @@ enum {
 %token <node> TOKEN_PRINTLN TOKEN_SEPARATOR TOKEN_IF TOKEN_WHILE TOKEN_ELSEIF TOKEN_ELSE TOKEN_END
                               
 %token TOKEN_ASSIGN
-%token TOKEN_PLUS TOKEN_SUB TOKEN_MUL TOKEN_DIV
-%token TOKEN_GT TOKEN_LT TOKEN_GE TOKEN_LE TOKEN_NE TOKEN_EQ
+%token TOKEN_NEG
 %token '(' ')'
 
 %left TOKEN_GT TOKEN_LT TOKEN_GE TOKEN_LE TOKEN_NE TOKEN_EQ
-%left TOKEN_PLUS TOKEN_MINUS
-%left TOKEN_MULT TOKEN_DIV
-%left TOKEN_NEG
-%left TOKEN_ASSIGN
+%left TOKEN_PLUS TOKEN_SUB
+%left TOKEN_MUL TOKEN_DIV
 
 %type<node> comm_list command if_comm while_comm var exp elseif_list elseif_block else_block
-%type<ival> op
 
 %start program
 %%
@@ -114,7 +156,47 @@ command : if_comm               { DEBUG_LOG("Reduce [if_comm] to [command]");
                                   $$ = make_node(TYPE_PRINTLN, $3, NULL); }
 ;
 
-exp: TOKEN_INTEGER              { DEBUG_LOG("Reduce [TOKEN_INTEGER] to [exp]");
+exp: exp TOKEN_PLUS exp         { DEBUG_LOG("Reduce [exp TOKEN_PLUS exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+
+    | exp TOKEN_SUB exp         { DEBUG_LOG("Reduce [exp TOKEN_SUB exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_MUL exp         { DEBUG_LOG("Reduce [exp TOKEN_MUL exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_DIV exp         { DEBUG_LOG("Reduce [exp TOKEN_DIV exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+
+    | exp TOKEN_GT exp          { DEBUG_LOG("Reduce [exp TOKEN_GT exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_LT exp          { DEBUG_LOG("Reduce [exp TOKEN_LT exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_GE exp          { DEBUG_LOG("Reduce [exp TOKEN_GE exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_LE exp          { DEBUG_LOG("Reduce [exp TOKEN_LE exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_EQ exp          { DEBUG_LOG("Reduce [exp TOKEN_EQ exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+    
+    | exp TOKEN_NE exp          { DEBUG_LOG("Reduce [exp TOKEN_NE exp] to [exp]");
+                                  $$ = make_op_node($1, $3, TYPE_OP_ADD);
+                                  if (!$$) YYERROR; }
+
+    | TOKEN_INTEGER             { DEBUG_LOG("Reduce [TOKEN_INTEGER] to [exp]");
                                   $$ = make_node(TYPE_INTEGER, NULL, NULL);
                                   $$->data.ival = yylval.ival; }
 
@@ -127,63 +209,9 @@ exp: TOKEN_INTEGER              { DEBUG_LOG("Reduce [TOKEN_INTEGER] to [exp]");
                                   $$->data.ival = yylval.ival; }
 
     | var
-
-    | exp op exp                { DEBUG_LOG("Reduce [exp op exp] to [exp]");  
-                                  if ($1->type != $3->type) {
-                                    DEBUG_LOG("ERROR: type mismatch - type of $1 is %d, type of $2 is %d\n", $1->type, $3->type);
-                                    YYERROR;
-                                  }
-                                  
-                                  int exp_type = $1->type;
-                                  switch ($2) /* op */
-                                  {
-                                    case TYPE_OP_ADD:
-                                    case TYPE_OP_SUB:
-                                    case TYPE_OP_MUL:
-                                    case TYPE_OP_DIV:
-                                        if (exp_type != TYPE_INTEGER && exp_type != TYPE_FLOAT) {
-                                            DEBUG_LOG("ERROR (1): bad type for op, type is %d\n", exp_type);
-                                            YYERROR;
-                                        }
-                                        break;
-                                    case TYPE_OP_GT:
-                                    case TYPE_OP_GE:
-                                    case TYPE_OP_LT:
-                                    case TYPE_OP_LE:
-                                        if (exp_type != TYPE_INTEGER && exp_type != TYPE_FLOAT) {
-                                            DEBUG_LOG("ERROR (2): bad type for op, type is %d\n", exp_type);
-                                            YYERROR;
-                                        }
-                                        
-                                        exp_type = TYPE_BOOL;
-                                        break;
-                                    case TYPE_OP_EQ:
-                                    case TYPE_OP_NE:
-                                        exp_type = TYPE_BOOL;
-                                        break;
-                                    default:
-                                        printf("Bad op type: %d", $2);
-                                        assert(0);
-                                        break;
-                                  }
-                                  
-                                  $$ = make_node(exp_type, $1, $3);
-                                  $$->op_type = $2; }
-
+    
     | '(' exp ')'               { DEBUG_LOG("Reduce ['(' exp ')'] to [exp]");
                                   $$ = $2; }
-;
-
-op: TOKEN_PLUS                  { $$ = TYPE_OP_ADD; }
-    | TOKEN_SUB                 { $$ = TYPE_OP_SUB; }
-    | TOKEN_MUL                 { $$ = TYPE_OP_MUL; }
-    | TOKEN_DIV                 { $$ = TYPE_OP_DIV; }
-    | TOKEN_GT                  { $$ = TYPE_OP_GT; }
-    | TOKEN_LT                  { $$ = TYPE_OP_LT; }
-    | TOKEN_GE                  { $$ = TYPE_OP_GE; }
-    | TOKEN_LE                  { $$ = TYPE_OP_LE; }
-    | TOKEN_EQ                  { $$ = TYPE_OP_EQ; }
-    | TOKEN_NE                  { $$ = TYPE_OP_NE; }
 ;
 
 var: TOKEN_VAR                  { DEBUG_LOG("Reduce [TOKEN_VAR] to [var]");
@@ -196,7 +224,7 @@ bool: TOKEN_TRUE
 if_comm: TOKEN_IF exp comm_list elseif_list else_block TOKEN_END  { 
                                                           DEBUG_LOG("Reduce [TOKEN_IF exp comm_list elseif_list else_block TOKEN_END] to [if_comm]");
                                                           if ($2->type != TYPE_BOOL) {
-                                                            DEBUG_LOG("ERROR: type mismatch - type of $2 ($d) is not TYPE_BOOL", $2->type);
+                                                            printf("ERROR: type mismatch - type of $2 ($d) is not TYPE_BOOL\n", $2->type);
                                                             YYERROR;
                                                           }
                                                         
@@ -217,7 +245,7 @@ if_comm: TOKEN_IF exp comm_list elseif_list else_block TOKEN_END  {
 
 while_comm: TOKEN_WHILE exp comm_list TOKEN_END         { DEBUG_LOG("Reduce [TOKEN_WHILE exp comm_list TOKEN_END] to [while_comm]");
                                                           if ($2->type != TYPE_BOOL) {
-                                                            DEBUG_LOG("ERROR: type mismatch - type of $2 ($d) is not TYPE_BOOL", $2->type);
+                                                            printf("ERROR: type mismatch - type of $2 ($d) is not TYPE_BOOL\n", $2->type);
                                                             YYERROR;
                                                           }
                                                           
@@ -746,7 +774,7 @@ int main() {
         return result;
     }
      
-    // print_tree(root);
+    print_tree(root);
     // print_symbol_table();
     
     compile(root);

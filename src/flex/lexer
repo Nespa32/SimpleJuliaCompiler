@@ -6,7 +6,7 @@
 /* needed for token enum */
 #include "../bison/parser.tab.h"
 
-int __lexer_debug__ = 1; /* toggle for debug prints*/
+int __lexer_debug__ = 0; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \

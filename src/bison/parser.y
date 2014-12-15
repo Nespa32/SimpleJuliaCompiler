@@ -11,7 +11,7 @@
 int yylex();
 int yyerror(char *s);
 
-int __parser_debug__ = 1; /* toggle for debug prints*/
+int __parser_debug__ = 0; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
@@ -41,6 +41,8 @@ enum {
     TYPE_OP_BITWISE_OR,
     TYPE_OP_LOGICAL_AND,
     TYPE_OP_LOGICAL_OR,
+    TYPE_OP_NEG, // !value
+    TYPE_OP_MINUS, // -value
     TYPE_ASSIGN,
     TYPE_IF,
     TYPE_WHILE,
@@ -139,6 +141,47 @@ parse_node* make_op_node(parse_node* left, parse_node* right, int op_type)
     return node;
 }
 
+parse_node* make_op_node_single_arg(parse_node* left, int op_type)
+{
+    int left_type = left->type;
+    
+    if (left_type == TYPE_VAR)
+    {
+        symbol_entry* var_sym = get_symbol(left->data.sval);
+        if (var_sym != NULL)
+            left_type = var_sym->type;
+    }
+    
+    int exp_type = left_type;
+    switch (op_type)
+    {
+        case TYPE_OP_NEG:
+            if (exp_type != TYPE_BOOL)
+            {
+                printf("ERROR (3): bad type for op, type is %d, op_type is %d\n", exp_type, op_type);
+                return NULL;
+            }
+            
+            break;
+        case TYPE_OP_MINUS:
+            if (exp_type == TYPE_BOOL)
+            {
+                printf("ERROR (3): bad type for op, type is %d, op_type is %d\n", exp_type, op_type);
+                return NULL;
+            }
+            
+            break;
+        default:
+            printf("Bad op type: %d", op_type);
+            assert(0);
+            break;
+    }
+    
+    parse_node* node = make_node(exp_type, left, NULL);
+    node->op_type = op_type;
+    return node;
+}
+
 %}
 
 %union {
@@ -156,13 +199,13 @@ parse_node* make_op_node(parse_node* left, parse_node* right, int op_type)
 %token <node> TOKEN_PRINTLN TOKEN_SEPARATOR TOKEN_IF TOKEN_WHILE TOKEN_ELSEIF TOKEN_ELSE TOKEN_END
                               
 %token TOKEN_ASSIGN
-%token TOKEN_NEG
 %token '(' ')'
 
 %left TOKEN_GT TOKEN_LT TOKEN_GE TOKEN_LE TOKEN_NE TOKEN_EQ
 %left TOKEN_ADD TOKEN_SUB
 %left TOKEN_MUL TOKEN_DIV
 %left TOKEN_BITWISE_AND TOKEN_BITWISE_OR TOKEN_LOGICAL_AND TOKEN_LOGICAL_OR
+%left TOKEN_NEG
 
 %type<node> comm_list command if_comm while_comm var exp elseif_list elseif_block else_block
 
@@ -251,7 +294,14 @@ exp: exp TOKEN_ADD exp         { DEBUG_LOG("Reduce [exp TOKEN_ADD exp] to [exp]"
                                   $$ = make_op_node($1, $3, TYPE_OP_LOGICAL_OR);
                                   if (!$$) YYERROR; }
                                 
-    
+    | TOKEN_NEG exp             { DEBUG_LOG("Reduce [TOKEN_NEG exp] to [exp]");
+                                  $$ = make_op_node_single_arg($2, TYPE_OP_NEG);
+                                  if (!$$) YYERROR; }
+                                  
+    | TOKEN_SUB exp %prec TOKEN_NEG { DEBUG_LOG("Reduce [TOKEN_SUB exp] to [exp]");
+                                  $$ = make_op_node_single_arg($2, TYPE_OP_MINUS);
+                                  if (!$$) YYERROR; }
+
     | TOKEN_INTEGER             { DEBUG_LOG("Reduce [TOKEN_INTEGER] to [exp]");
                                   $$ = make_node(TYPE_INTEGER, NULL, NULL);
                                   $$->data.ival = yylval.ival; }
@@ -272,41 +322,41 @@ exp: exp TOKEN_ADD exp         { DEBUG_LOG("Reduce [exp TOKEN_ADD exp] to [exp]"
 
 var: TOKEN_VAR                  { DEBUG_LOG("Reduce [TOKEN_VAR] to [var]");
                                   $$ = make_node(TYPE_VAR, NULL, NULL);
-                                  printf("TEST: %s\n", yylval.sval);
                                   $$->data.sval = yylval.sval; }
 
 bool: TOKEN_TRUE
     | TOKEN_FALSE
 
 if_comm: TOKEN_IF exp comm_list elseif_list else_block TOKEN_END  { 
-                                                          DEBUG_LOG("Reduce [TOKEN_IF exp comm_list elseif_list else_block TOKEN_END] to [if_comm]");
-                                                          if ($2->type != TYPE_BOOL) {
-                                                            printf("ERROR: type mismatch - type of $2 (%d) is not TYPE_BOOL\n", $2->type);
-                                                            YYERROR;
-                                                          }
-                                                        
-                                                          $$ = make_node(TYPE_IF, $2, $3);
-                                                          $$->next = ($4 != NULL) ? $4 : $5;
-                                                          if ($4 != NULL) {
-                                                            $$->next = $4; // elseif_list
-                                                            parse_node* temp = $4;
-                                                            while (temp->next != NULL)
-                                                                temp = temp->next; // goto end of the TYPE_ELSEIF node list
-                                                                
-                                                            temp = $5; // else_block
-                                                          } else { // elseif_list is empty
-                                                            $$->next = $5; // else_block
-                                                          }
-                                                        }
+                                  DEBUG_LOG("Reduce [TOKEN_IF exp comm_list elseif_list else_block TOKEN_END] to [if_comm]");
+                                  if ($2->type != TYPE_BOOL) {
+                                    printf("ERROR: type mismatch - type of $2 (%d) is not TYPE_BOOL\n", $2->type);
+                                    YYERROR;
+                                  }
+                                
+                                  $$ = make_node(TYPE_IF, $2, $3);
+                                  $$->next = ($4 != NULL) ? $4 : $5;
+                                  if ($4 != NULL) {
+                                    $$->next = $4; // elseif_list
+                                    parse_node* temp = $4;
+                                    while (temp->next != NULL)
+                                        temp = temp->next; // goto end of the TYPE_ELSEIF node list
+                                        
+                                    temp = $5; // else_block
+                                  } else { // elseif_list is empty
+                                    $$->next = $5; // else_block
+                                  }
+                                }
 ;
 
-while_comm: TOKEN_WHILE exp comm_list TOKEN_END         { DEBUG_LOG("Reduce [TOKEN_WHILE exp comm_list TOKEN_END] to [while_comm]");
-                                                          if ($2->type != TYPE_BOOL) {
-                                                            printf("ERROR: type mismatch - type of $2 (%d) is not TYPE_BOOL\n", $2->type);
-                                                            YYERROR;
-                                                          }
-                                                          
-                                                          $$ = make_node(TYPE_WHILE, $2, $3); }
+while_comm: TOKEN_WHILE exp comm_list TOKEN_END         {
+                                  DEBUG_LOG("Reduce [TOKEN_WHILE exp comm_list TOKEN_END] to [while_comm]");
+                                  if ($2->type != TYPE_BOOL) {
+                                    printf("ERROR: type mismatch - type of $2 (%d) is not TYPE_BOOL\n", $2->type);
+                                    YYERROR;
+                                  }
+                                  
+                                  $$ = make_node(TYPE_WHILE, $2, $3); }
 ;
 
 elseif_list: /* empty */                { DEBUG_LOG("Reduce [EMPTY] to [elseif_list]");
@@ -366,6 +416,8 @@ const char* strForType(int type)
         case TYPE_OP_BITWISE_OR: return "TYPE_OP_BITWISE_OR";
         case TYPE_OP_LOGICAL_AND: return "TYPE_OP_LOGICAL_AND";
         case TYPE_OP_LOGICAL_OR: return "TYPE_OP_LOGICAL_OR";
+        case TYPE_OP_NEG: return "TYPE_OP_NEG";
+        case TYPE_OP_MINUS: return "TYPE_OP_MINUS";
         case TYPE_ASSIGN: return "TYPE_ASSIGN";
         case TYPE_IF: return "TYPE_IF";
         case TYPE_WHILE: return "TYPE_WHILE";
@@ -493,6 +545,7 @@ typedef enum
     CODE_VAL_REGISTER,
     CODE_VAL_INT_VALUE,
     CODE_VAL_FLOAT_VALUE,
+    CODE_VAL_FLOAT_MEMORY,
     CODE_VAL_LABEL,
 } CodeValType;
 
@@ -541,7 +594,9 @@ typedef struct Code Code;
 Code* firstCode = NULL;
 Code* lastCode = NULL;
 
-Code* add_code(CodeOpType op, CompileData dest, CompileData val1, CompileData val2)
+int add_fp(float value);
+
+void add_code(CodeOpType op, CompileData dest, CompileData val1, CompileData val2)
 {
     Code* c = (Code*)malloc(sizeof(Code));
     if (firstCode == NULL)
@@ -560,14 +615,22 @@ Code* add_code(CodeOpType op, CompileData dest, CompileData val1, CompileData va
     c->val1 = val1;
     c->val2 = val2;
     c->next = NULL;
-    return c;
+    
+    if (op == CODE_OP_LI_F)
+    {
+        // the hacks we do for love
+        int id = add_fp(c->val1.data.fval);
+        c->val1.type = CODE_VAL_FLOAT_MEMORY;
+        c->val1.registerType = CODE_REGISTER_NONE;
+        c->val1.data.ival = id;
+    }
 }
 
 int label_counter = 0;
 int symbol_int_register_counter = 0;
-int symbol_float_register_counter = 0;
+int symbol_float_register_counter = 1;
 int temp_int_register_counter = 0;
-int temp_float_register_counter = 0;
+int* temp_float_register_counter = &symbol_float_register_counter;
 
 CompileData create_label()
 {
@@ -575,6 +638,50 @@ CompileData create_label()
     data.type = CODE_VAL_LABEL;
     data.data.ival = label_counter++;
     return data;
+}
+
+struct FloatImmediate
+{
+    int id;
+    float value;
+    
+    struct FloatImmediate* next;
+};
+
+typedef struct FloatImmediate FloatImmediate;
+
+FloatImmediate* first_fp = NULL;
+FloatImmediate* last_fp = NULL;
+int fp_counter = 0;
+
+int add_fp(float value)
+{
+    FloatImmediate* fp = (FloatImmediate*)malloc(sizeof(FloatImmediate));
+    if (first_fp == NULL)
+    {
+        first_fp = fp;
+        last_fp = fp;
+    }
+    else
+    {
+        last_fp->next = fp;
+        last_fp = fp;
+    }
+    
+    fp->id = fp_counter++;
+    fp->value = value;
+    fp->next = NULL;
+    return fp->id;
+}
+
+void print_float_variables()
+{
+    FloatImmediate* fp = first_fp;
+    while (fp != NULL)
+    {
+        printf("fp%u:\t.float\t%f\n", fp->id, fp->value);
+        fp = fp->next;
+    }
 }
 
 int get_register_for_symbol(parse_node* node)
@@ -613,9 +720,9 @@ void compile(parse_node* node)
             if (rightData.type != CODE_VAL_REGISTER) // needs to be a register
             {
                 CompileData destData = mk_compile_data();
-                int* destRegister = right->type == TYPE_FLOAT ? &temp_float_register_counter : &temp_int_register_counter;
+                int* destRegister = right->type == TYPE_FLOAT ? temp_float_register_counter : &temp_int_register_counter;
                 destData.type = CODE_VAL_REGISTER;
-                destData.registerType = CODE_REGISTER_TEMP;
+                destData.registerType = right->type == TYPE_FLOAT ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                 destData.data.ival = (*destRegister)++;
                 add_code(right->type == TYPE_FLOAT ? CODE_OP_LI_F : CODE_OP_LI, destData, rightData, mk_compile_data());
                 rightData = destData;
@@ -635,6 +742,9 @@ void compile(parse_node* node)
                 {
                     leftData = compile_exp(left);
                     CompileData label1 = create_label();
+                    if (leftData.registerType == CODE_REGISTER_FLOAT)
+                        leftData.registerType = CODE_REGISTER_TEMP;
+
                     add_code(CODE_OP_BEQ, leftData, mk_compile_data(), label1); // beq $var1, $zero, L1
                     compile(right);
                     add_code(CODE_OP_JUMP, label2, mk_compile_data(), mk_compile_data());
@@ -657,6 +767,9 @@ void compile(parse_node* node)
             add_code(CODE_OP_LABEL, label1, mk_compile_data(), mk_compile_data()); // make label L1
             leftData = compile_exp(left);
             CompileData label2 = create_label();
+            if (leftData.registerType == CODE_REGISTER_FLOAT)
+                leftData.registerType = CODE_REGISTER_TEMP;
+                        
             add_code(CODE_OP_BEQ, leftData, mk_compile_data(), label2); // beq $var1, $zero, L2
             compile(right);
             add_code(CODE_OP_JUMP, label1, mk_compile_data(), mk_compile_data()); // make j L1
@@ -759,10 +872,17 @@ CompileData compile_exp(parse_node* node)
             switch (node->type)
             {
                 case TYPE_VAR: // need to use sval to get the variable pointer (or create it)
+                {
+                    int isFloat = 0;
+                    symbol_entry* sym = get_symbol(node->data.sval);
+                    if (sym && sym->type == TYPE_FLOAT)
+                        isFloat = 1;
+                        
                     returnData.type = CODE_VAL_REGISTER;
-                    returnData.registerType = CODE_REGISTER_SAVED;
+                    returnData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_SAVED;
                     returnData.data.ival = get_register_for_symbol(node);
                     return returnData;
+                }
                 case TYPE_INTEGER:
                 case TYPE_BOOL:
                     returnData.type = CODE_VAL_INT_VALUE;
@@ -913,15 +1033,25 @@ CompileData compile_exp(parse_node* node)
                 CompileData* registerData = leftData.type == CODE_VAL_REGISTER ? &leftData : &rightData;
                 CompileData* valueData = leftData.type != CODE_VAL_REGISTER ? &leftData : &rightData;
                 
-                int* destRegister = isFloat ? &temp_float_register_counter : &temp_int_register_counter;
+                int* destRegister = isFloat ? temp_float_register_counter : &temp_int_register_counter;
                 CompileData destData = mk_compile_data();
                 destData.type = CODE_VAL_REGISTER;
-                destData.registerType = CODE_REGISTER_TEMP;
+                destData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                 destData.data.ival = *destRegister;
                 
                 switch (node->op_type)
                 {
                     case TYPE_OP_ADD:
+                        if (isFloat) // we always need new registers for floats, no immediates
+                        {
+                            add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *valueData, mk_compile_data());
+                            valueData->type = CODE_VAL_REGISTER;
+                            valueData->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
+                            valueData->data.ival = destData.data.ival;
+                            
+                            destData.data.ival = ++(*destRegister);
+                        }
+                        
                         add_code(isFloat ? CODE_OP_ADD_F : CODE_OP_ADD, destData, *registerData, *valueData);
                         break;
                     case TYPE_OP_SUB:
@@ -935,18 +1065,47 @@ CompileData compile_exp(parse_node* node)
                                 valueData->data.ival *= -1;
                         }
                         
+                        if (isFloat) // we always need new registers for floats, no immediates
+                        {
+                            add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *valueData, mk_compile_data());
+                            valueData->type = CODE_VAL_REGISTER;
+                            valueData->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
+                            valueData->data.ival = destData.data.ival;
+                            
+                            destData.data.ival = ++(*destRegister);
+                        }
+                        
                         add_code(isFloat ? CODE_OP_SUB_F : CODE_OP_SUB, destData, *registerData, *valueData);
                         break;
                     case TYPE_OP_MUL:
+                        if (isFloat) // we always need new registers for floats, no immediates
+                        {
+                            add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *valueData, mk_compile_data());
+                            valueData->type = CODE_VAL_REGISTER;
+                            valueData->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
+                            valueData->data.ival = destData.data.ival;
+                            
+                            destData.data.ival = ++(*destRegister);
+                        }
+                        
                         add_code(isFloat ? CODE_OP_MUL_F : CODE_OP_MUL, destData, *registerData, *valueData);
                         break;
                     case TYPE_OP_DIV:
+                        if (isFloat) // we always need new registers for floats, no immediates
+                        {
+                            add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *valueData, mk_compile_data());
+                            valueData->type = CODE_VAL_REGISTER;
+                            valueData->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
+                            valueData->data.ival = destData.data.ival;
+                            
+                            destData.data.ival = ++(*destRegister);
+                        }
                         // order must be kept for division, we create a new register if needed for a direct value
-                        if (valueData == &leftData)
+                        else if (valueData == &leftData)
                         {
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, leftData, mk_compile_data());
                             leftData.type = CODE_VAL_REGISTER;
-                            leftData.registerType = CODE_REGISTER_TEMP;
+                            leftData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             leftData.data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
@@ -959,12 +1118,14 @@ CompileData compile_exp(parse_node* node)
                             CompileData* ptr = valueData == &leftData ? &leftData : &rightData;
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *ptr, mk_compile_data());
                             ptr->type = CODE_VAL_REGISTER;
-                            ptr->registerType = CODE_REGISTER_TEMP;
+                            ptr->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             ptr->data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
                         }
                         
+                        // always temp
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLT_F : CODE_OP_SLT, destData, rightData, leftData);
                         break;
                     case TYPE_OP_GE:
@@ -972,12 +1133,14 @@ CompileData compile_exp(parse_node* node)
                             CompileData* ptr = valueData == &leftData ? &leftData : &rightData;
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *ptr, mk_compile_data());
                             ptr->type = CODE_VAL_REGISTER;
-                            ptr->registerType = CODE_REGISTER_TEMP;
+                            ptr->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             ptr->data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
                         }
                         
+                        // always temp
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLE_F : CODE_OP_SLE, destData, rightData, leftData);
                         break;
                     case TYPE_OP_LT:
@@ -985,12 +1148,14 @@ CompileData compile_exp(parse_node* node)
                             CompileData* ptr = valueData == &leftData ? &leftData : &rightData;
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *ptr, mk_compile_data());
                             ptr->type = CODE_VAL_REGISTER;
-                            ptr->registerType = CODE_REGISTER_TEMP;
+                            ptr->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             ptr->data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
                         }
                         
+                        // always temp
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLT_F : CODE_OP_SLT, destData, leftData, rightData);
                         break;
                     case TYPE_OP_LE:
@@ -998,12 +1163,14 @@ CompileData compile_exp(parse_node* node)
                             CompileData* ptr = valueData == &leftData ? &leftData : &rightData;
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *ptr, mk_compile_data());
                             ptr->type = CODE_VAL_REGISTER;
-                            ptr->registerType = CODE_REGISTER_TEMP;
+                            ptr->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             ptr->data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
                         }
                         
+                        // always temp
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLE_F : CODE_OP_SLE, destData, leftData, rightData);
                         break;
                     case TYPE_OP_EQ:
@@ -1011,12 +1178,14 @@ CompileData compile_exp(parse_node* node)
                             CompileData* ptr = valueData == &leftData ? &leftData : &rightData;
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *ptr, mk_compile_data());
                             ptr->type = CODE_VAL_REGISTER;
-                            ptr->registerType = CODE_REGISTER_TEMP;
+                            ptr->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             ptr->data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
                         }
                         
+                        // always temp
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SEQ_F : CODE_OP_SEQ, destData, leftData, rightData);
                         break;
                     case TYPE_OP_NE:
@@ -1024,12 +1193,14 @@ CompileData compile_exp(parse_node* node)
                             CompileData* ptr = valueData == &leftData ? &leftData : &rightData;
                             add_code(isFloat ? CODE_OP_LI_F : CODE_OP_LI, destData, *ptr, mk_compile_data());
                             ptr->type = CODE_VAL_REGISTER;
-                            ptr->registerType = CODE_REGISTER_TEMP;
+                            ptr->registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                             ptr->data.ival = destData.data.ival;
                             
                             destData.data.ival = ++(*destRegister);
                         }
                         
+                        // always temp
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SNE_F : CODE_OP_SNE, destData, leftData, rightData);
                         break;
                     case TYPE_OP_BITWISE_AND:
@@ -1050,7 +1221,7 @@ CompileData compile_exp(parse_node* node)
                 }
             
                 returnData.type = CODE_VAL_REGISTER;
-                returnData.registerType = CODE_REGISTER_TEMP;
+                returnData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                 returnData.data.ival = *destRegister;
                 ++(*destRegister);
                 return returnData;
@@ -1058,10 +1229,10 @@ CompileData compile_exp(parse_node* node)
             // both nodes are registers
             else
             {
-                int* destRegister = isFloat ? &temp_float_register_counter : &temp_int_register_counter;
+                int* destRegister = isFloat ? temp_float_register_counter : &temp_int_register_counter;
                 CompileData destData = mk_compile_data();
                 destData.type = CODE_VAL_REGISTER;
-                destData.registerType = CODE_REGISTER_TEMP;
+                destData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                 destData.data.ival = *destRegister;
                 
                 switch (node->op_type)
@@ -1079,21 +1250,27 @@ CompileData compile_exp(parse_node* node)
                         add_code(isFloat ? CODE_OP_DIV_F : CODE_OP_DIV, destData, leftData, rightData);
                         break;
                     case TYPE_OP_GT:
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLT_F : CODE_OP_SLT, destData, rightData, leftData);
                         break;
                     case TYPE_OP_GE:
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLE_F : CODE_OP_SLE, destData, rightData, leftData);
                         break;
                     case TYPE_OP_LT:
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLT_F : CODE_OP_SLT, destData, leftData, rightData);
                         break;
                     case TYPE_OP_LE:
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SLE_F : CODE_OP_SLE, destData, leftData, rightData);
                         break;
                     case TYPE_OP_EQ:
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SEQ_F : CODE_OP_SEQ, destData, leftData, rightData);
                         break;
                     case TYPE_OP_NE:
+                        destData.registerType = CODE_REGISTER_TEMP;
                         add_code(isFloat ? CODE_OP_SNE_F : CODE_OP_SNE, destData, leftData, rightData);
                         break;
                     case TYPE_OP_BITWISE_AND:
@@ -1114,12 +1291,82 @@ CompileData compile_exp(parse_node* node)
                 }
                 
                 returnData.type = CODE_VAL_REGISTER;
-                returnData.registerType = CODE_REGISTER_TEMP;
+                returnData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
                 returnData.data.ival = *destRegister;
                 ++(*destRegister);
                 return returnData;
             }
             break;
+        }
+        case TYPE_OP_NEG:
+        case TYPE_OP_MINUS:
+        {
+            CompileData leftData = compile_exp(left);
+            
+            int isFloat = 0;
+            if (left->type == TYPE_FLOAT)
+                isFloat = 1;
+            else if (left->type == TYPE_VAR)
+            {
+                symbol_entry* sym = get_symbol(left->data.sval);
+                if (sym && sym->type == TYPE_FLOAT)
+                    isFloat = 1;
+            }
+            
+            // it's an immediate value
+            if (leftData.type != CODE_VAL_REGISTER)
+            {
+                returnData.type = isFloat ? CODE_VAL_FLOAT_VALUE : CODE_VAL_INT_VALUE;
+                if  (node->op_type == TYPE_OP_NEG)
+                    returnData.data.ival = !leftData.data.ival;
+                else if (node->op_type == TYPE_OP_MINUS)
+                {
+                    if (isFloat)
+                        returnData.data.fval = -leftData.data.fval;
+                    else
+                        returnData.data.ival = -leftData.data.ival;
+                }
+            }
+            else
+            {
+                int* destRegister = isFloat ? temp_float_register_counter : &temp_int_register_counter;
+                returnData.type = CODE_VAL_REGISTER;
+                returnData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_TEMP;
+                returnData.data.ival = *destRegister;
+                (*destRegister)++; // increment the register counter, we're adding an additional operation here
+                
+                CompileData rightData = mk_compile_data();
+
+                if (node->op_type == TYPE_OP_NEG)
+                {
+                    CompileData label1 = create_label();
+                    CompileData label2 = create_label();
+                    if (leftData.registerType == CODE_REGISTER_FLOAT)
+                        leftData.registerType = CODE_REGISTER_TEMP;
+
+                    add_code(CODE_OP_BEQ, leftData, mk_compile_data(), label1); // beq $var1, $zero, L1
+                    rightData.type = CODE_VAL_INT_VALUE;
+                    rightData.data.ival = 0;
+                    add_code(CODE_OP_LI, returnData, rightData, mk_compile_data());
+                    add_code(CODE_OP_JUMP, label2, mk_compile_data(), mk_compile_data());
+                    add_code(CODE_OP_LABEL, label1, mk_compile_data(), mk_compile_data()); // label L1
+                    rightData.type = CODE_VAL_INT_VALUE;
+                    rightData.data.ival = 1;
+                    add_code(CODE_OP_LI, returnData, rightData, mk_compile_data());
+                    add_code(CODE_OP_LABEL, label2, mk_compile_data(), mk_compile_data()); // label L2
+                }
+                else if (node->op_type == TYPE_OP_MINUS)
+                {
+                    rightData.type = isFloat ? CODE_VAL_FLOAT_VALUE : CODE_VAL_INT_VALUE;
+                    if (isFloat)
+                        rightData.data.fval = -1;
+                    else
+                        rightData.data.ival = -1;
+                    
+                    add_code(isFloat ? CODE_OP_MUL_F : CODE_OP_MUL, returnData, leftData, rightData);
+                }
+            }
+            return returnData;
         }
         default:
             assert(0);
@@ -1142,9 +1389,7 @@ const char* print_CompileData(CompileData data)
     
     const char* varType = "";
     if (data.type == CODE_VAL_LABEL)
-    {
         varType = "L";
-    }
     else if (data.type == CODE_VAL_REGISTER)
     {
         if (data.registerType == CODE_REGISTER_SAVED)
@@ -1154,6 +1399,8 @@ const char* print_CompileData(CompileData data)
         else // float?
             varType = "$f";
     }
+    else if (data.type == CODE_VAL_FLOAT_MEMORY)
+        varType = "fp";
         
     sprintf(temp_buffer, "%s%u", varType, data.data.ival);
     int len = strlen(temp_buffer);
@@ -1177,7 +1424,12 @@ void convert_code_to_mips()
     printf("__bool_true__:\t.asciiz\t\"true\"\n");
     printf("__bool_false__:\t.asciiz\t\"false\"\n");
     
+    print_float_variables();
+    
     printf(".text\n");
+    // default $f0 to zero, bloody MIPS doesn't allow $zero to be used
+    printf("\tmtc1 $zero $f0\n");
+	printf("\tcvt.s.w $f0, $f0\n");
     
     Code* code = firstCode;
     while (code != NULL)
@@ -1192,26 +1444,31 @@ void convert_code_to_mips()
                 printf("\tadd %s, %s, $zero\n", destStr, val1Str);
                 break;
             case CODE_OP_ASSIGN_F:
+                printf("\tadd.s %s, %s, $f0\n", destStr, val1Str);
                 break;
             case CODE_OP_ADD:
                 printf("\tadd %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_ADD_F:
+                printf("\tadd.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SUB:
                 printf("\tsub %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SUB_F:
+                printf("\tsub.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_MUL:
                 printf("\tmul %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_MUL_F:
+                printf("\tmul.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_DIV:
                 printf("\tdiv %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_DIV_F:
+                printf("\tdiv.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_BEQ:
                 printf("\tbeq %s, $zero, %s\n", destStr, val2Str);
@@ -1226,19 +1483,72 @@ void convert_code_to_mips()
                 printf("\tli %s, %s\n", destStr, val1Str);
                 break;
             case CODE_OP_LI_F:
+                printf("\tl.s %s, %s\n", destStr, val1Str);
                 break;
             case CODE_OP_SLT:
                 printf("\tslt %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
+            case CODE_OP_SLT_F:
+            {
+                static slt_f_label = 0;
+                printf("\tc.lt.s %s, %s\n", val1Str, val2Str);
+                printf("\tbc1t slt_f_%u\n", slt_f_label);
+                printf("\tli %s 0\n", destStr);
+                printf("\tj slt_f_%u\n", slt_f_label + 1);
+                printf("slt_f_%u:\n", slt_f_label);
+                printf("\tli %s 1\n", destStr);
+                printf("slt_f_%u:\n", slt_f_label + 1);
+                slt_f_label += 2; // we use 2 labels here
+                break;
+            }
             case CODE_OP_SLE:
                 printf("\tsle %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
+            case CODE_OP_SLE_F:
+            {
+                static sle_f_label = 0;
+                printf("\tc.le.s %s, %s\n", val1Str, val2Str);
+                printf("\tbc1t sle_f_%u\n", sle_f_label);
+                printf("\tli %s 0\n", destStr);
+                printf("\tj sle_f_%u\n", sle_f_label + 1);
+                printf("sle_f_%u:\n", sle_f_label);
+                printf("\tli %s 1\n", destStr);
+                printf("sle_f_%u:\n", sle_f_label + 1);
+                sle_f_label += 2; // we use 2 labels here
+                break;
+            }
             case CODE_OP_SEQ:
                 printf("\tseq %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
+            case CODE_OP_SEQ_F:
+            {
+                static seq_f_label = 0;
+                printf("\tc.eq.s %s, %s\n", val1Str, val2Str);
+                printf("\tbc1t seq_f_%u\n", seq_f_label);
+                printf("\tli %s 0\n", destStr);
+                printf("\tj seq_f_%u\n", seq_f_label + 1);
+                printf("seq_f_%u:\n", seq_f_label);
+                printf("\tli %s 1\n", destStr);
+                printf("seq_f_%u:\n", seq_f_label + 1);
+                seq_f_label += 2; // we use 2 labels here
+                break;
+            }
             case CODE_OP_SNE:
                 printf("\tsne %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
+            case CODE_OP_SNE_F:
+            {
+                static sne_f_label = 0;
+                printf("\tc.eq.s %s, %s\n", val1Str, val2Str);
+                printf("\tbc1t sne_f_%u\n", sne_f_label);
+                printf("\tli %s 1\n", destStr); // values switched on purpose
+                printf("\tj sne_f_%u\n", sne_f_label + 1);
+                printf("sne_f_%u:\n", sne_f_label);
+                printf("\tli %s 0\n", destStr); // values switched on purpose
+                printf("sne_f_%u:\n", sne_f_label + 1);
+                sne_f_label += 2; // we use 2 labels here
+                break;
+            }
             case CODE_OP_BITWISE_AND:
                 printf("\tand %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
@@ -1257,8 +1567,8 @@ void convert_code_to_mips()
                 printf("\tsyscall\n");
                 break;
             case CODE_PRINT_FLOAT:
-                printf("\tli $v0, 3\n"); // print double code = 3
-                printf("\tadd.d $f12, $f%u, $zero\n", destStr); // @todo: 
+                printf("\tli $v0, 2\n"); // print float code = 2
+                printf("\tadd.s $f12, %s, $f0\n", destStr);
                 printf("\tsyscall\n");
                 break;
             case CODE_PRINT_BOOL:
@@ -1314,21 +1624,37 @@ int main() {
         return result;
     }
      
-    print_tree(root);
+    // print_tree(root);
     
     compile(root);
     
-    print_symbol_table();
+    // print_symbol_table();
     
     convert_code_to_mips();
     
     // free up stuff
     free_parse_node(root); // delete the whole tree structure    
-    while (symtable  != NULL)
+    while (symtable != NULL)
     {
         symbol_entry* ptr = symtable->next;
         free(symtable);
         symtable = ptr;
+    }
+    
+    lastCode = NULL;
+    while (firstCode != NULL)
+    {
+        Code* ptr = firstCode->next;
+        free(firstCode);
+        firstCode = ptr;
+    }
+    
+    last_fp = NULL;
+    while (first_fp != NULL)
+    {
+        FloatImmediate* ptr = first_fp->next;
+        free(first_fp);
+        first_fp = ptr;
     }
     return 0;
 }

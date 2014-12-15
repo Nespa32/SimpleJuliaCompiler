@@ -1,4 +1,7 @@
 
+#ifndef __SRC_PARSE_NODE_H__
+#define __SRC_PARSE_NODE_H__
+
 struct parse_node
 {
     /* values */
@@ -26,3 +29,5 @@ void free_parse_node(parse_node* node);
 
 /* global variables */
 extern parse_node* root;
+
+#endif

@@ -21,12 +21,12 @@ mkdir -p build # gcc won't build the directory
 # --report=state creates an .output file for debugging
 cd src/bison/
 echo -e "${LC}-- Bison Start --${NC}"
-bison -d parser.y --report=state
+bison -d parser.y
 echo -e "${LC}-- Bison End --${NC}"
 
 cd ../../
 echo -e "${LC}-- GCC Start --${NC}"
-gcc -g src/flex/lex.yy.c src/bison/parser.tab.c libs/libyywrap.c src/symbol_table.c src/parse_node.c -o build/compiler
+gcc -g src/flex/lex.yy.c src/bison/parser.tab.c libs/libyywrap.c src/symbol_table.c src/parse_node.c src/main.c -o build/compiler
 echo -e "${LC}-- GCC End --${NC}"
 
 

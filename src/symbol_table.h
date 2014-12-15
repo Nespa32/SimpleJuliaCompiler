@@ -1,3 +1,7 @@
+
+#ifndef __SRC_SYMBOL_TABLE_H__
+#define __SRC_SYMBOL_TABLE_H__
+
 /* SYMBOL TABLE */
 struct symbol_entry
 {
@@ -16,3 +20,4 @@ symbol_entry* get_symbol(char* symname);
 /* global variable */
 extern symbol_entry* symtable;
 
+#endif

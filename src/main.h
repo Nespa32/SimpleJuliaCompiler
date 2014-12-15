@@ -133,10 +133,25 @@ struct FloatImmediate
 
 typedef struct FloatImmediate FloatImmediate;
 
+// debug helpers
+const char* strForType(int type);
+void print_tree(parse_node* node);
+void print_symbol_table();
+// --
+
+CompileData mk_compile_data();
+CompileData create_label();
+
+void add_code(CodeOpType op, CompileData dest, CompileData val1, CompileData val2);
 int add_fp(float value);
 
-CompileData compile_exp(parse_node* node);
 void compile(parse_node* node);
+CompileData compile_exp(parse_node* node);
+
+const char* print_CompileData(CompileData data);
+
+void convert_code_to_mips(FILE* file);
+void print_float_variables(FILE* file);
 
 #endif
 

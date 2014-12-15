@@ -48,7 +48,7 @@ const char* strForType(int type)
         case TYPE_CONNECTION_NODE: return "TYPE_CONNECTION_NODE";
     }
 
-    return "<undefined>"; // shitty compilers (like this one) might complain
+    return "<undefined>";
 }
 
 void print_tree(parse_node* node)
@@ -123,6 +123,7 @@ void print_symbol_table()
         printf("Symbol - name: %s, type: %s, register: %u\n", ptr->name, strForType(ptr->type), ptr->_register);
         ptr = ptr->next;
     }
+
     printf("-- Symbol Table - End --\n");
 }
 
@@ -191,31 +192,6 @@ int add_fp(float value)
     fp->value = value;
     fp->next = NULL;
     return fp->id;
-}
-
-void print_float_variables()
-{
-    FloatImmediate* fp = first_fp;
-    while (fp != NULL)
-    {
-        printf("fp%u:\t.float\t%f\n", fp->id, fp->value);
-        fp = fp->next;
-    }
-}
-
-int get_register_for_symbol(parse_node* node)
-{
-    symbol_entry* sym = get_symbol(node->data.sval);
-    if (!sym)
-    {
-        printf("Var %s not initialized! Exiting!\n", node->data.sval);
-        exit(1);
-    }
-    
-    if (sym->_register == -1)
-        sym->_register = sym->type == TYPE_FLOAT ? symbol_float_register_counter++ : symbol_int_register_counter++;
-        
-    return sym->_register;
 }
 
 // possibly return a variable type
@@ -392,12 +368,22 @@ CompileData compile_exp(parse_node* node)
                 {
                     int isFloat = 0;
                     symbol_entry* sym = get_symbol(node->data.sval);
-                    if (sym && sym->type == TYPE_FLOAT)
+                    if (!sym)
+                    {
+                        printf("Var %s not initialized! Exiting!\n", node->data.sval);
+                        exit(1);
+                    }
+
+                    if (sym->type == TYPE_FLOAT)
                         isFloat = 1;
-                        
+
                     returnData.type = CODE_VAL_REGISTER;
                     returnData.registerType = isFloat ? CODE_REGISTER_FLOAT : CODE_REGISTER_SAVED;
-                    returnData.data.ival = get_register_for_symbol(node);
+
+                    if (sym->_register == -1)
+                        sym->_register = sym->type == TYPE_FLOAT ? symbol_float_register_counter++ : symbol_int_register_counter++;
+
+                    returnData.data.ival = sym->_register;
                     return returnData;
                 }
                 case TYPE_INTEGER:
@@ -933,20 +919,20 @@ const char* print_CompileData(CompileData data)
     return buf;
 }
 
-void convert_code_to_mips()
+void convert_code_to_mips(FILE* file)
 {
-    printf(".data\n");
+    fprintf(file, ".data\n");
     // default strings
-    printf("__newline__:\t.asciiz\t\"\\n\"\n");
-    printf("__bool_true__:\t.asciiz\t\"true\"\n");
-    printf("__bool_false__:\t.asciiz\t\"false\"\n");
+    fprintf(file, "__newline__:\t.asciiz\t\"\\n\"\n");
+    fprintf(file, "__bool_true__:\t.asciiz\t\"true\"\n");
+    fprintf(file, "__bool_false__:\t.asciiz\t\"false\"\n");
     
-    print_float_variables();
+    print_float_variables(file);
     
-    printf(".text\n");
+    fprintf(file, ".text\n");
     // default $f0 to zero, bloody MIPS doesn't allow $zero to be used
-    printf("\tmtc1 $zero $f0\n");
-	printf("\tcvt.s.w $f0, $f0\n");
+    fprintf(file, "\tmtc1 $zero $f0\n");
+	fprintf(file, "\tcvt.s.w $f0, $f0\n");
     
     Code* code = firstCode;
     while (code != NULL)
@@ -958,135 +944,135 @@ void convert_code_to_mips()
         switch (code->op)
         {
             case CODE_OP_ASSIGN:
-                printf("\tadd %s, %s, $zero\n", destStr, val1Str);
+                fprintf(file, "\tadd %s, %s, $zero\n", destStr, val1Str);
                 break;
             case CODE_OP_ASSIGN_F:
-                printf("\tadd.s %s, %s, $f0\n", destStr, val1Str);
+                fprintf(file, "\tadd.s %s, %s, $f0\n", destStr, val1Str);
                 break;
             case CODE_OP_ADD:
-                printf("\tadd %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tadd %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_ADD_F:
-                printf("\tadd.s %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tadd.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SUB:
-                printf("\tsub %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tsub %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SUB_F:
-                printf("\tsub.s %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tsub.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_MUL:
-                printf("\tmul %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tmul %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_MUL_F:
-                printf("\tmul.s %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tmul.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_DIV:
-                printf("\tdiv %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tdiv %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_DIV_F:
-                printf("\tdiv.s %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tdiv.s %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_BEQ:
-                printf("\tbeq %s, $zero, %s\n", destStr, val2Str);
+                fprintf(file, "\tbeq %s, $zero, %s\n", destStr, val2Str);
                 break;
             case CODE_OP_JUMP:
-                printf("\tj %s\n", destStr);
+                fprintf(file, "\tj %s\n", destStr);
                 break;
             case CODE_OP_LABEL:
-                printf("%s:\n", destStr);
+                fprintf(file, "%s:\n", destStr);
                 break;
             case CODE_OP_LI:
-                printf("\tli %s, %s\n", destStr, val1Str);
+                fprintf(file, "\tli %s, %s\n", destStr, val1Str);
                 break;
             case CODE_OP_LI_F:
-                printf("\tl.s %s, %s\n", destStr, val1Str);
+                fprintf(file, "\tl.s %s, %s\n", destStr, val1Str);
                 break;
             case CODE_OP_SLT:
-                printf("\tslt %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tslt %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SLT_F:
             {
                 static slt_f_label = 0;
-                printf("\tc.lt.s %s, %s\n", val1Str, val2Str);
-                printf("\tbc1t slt_f_%u\n", slt_f_label);
-                printf("\tli %s 0\n", destStr);
-                printf("\tj slt_f_%u\n", slt_f_label + 1);
-                printf("slt_f_%u:\n", slt_f_label);
-                printf("\tli %s 1\n", destStr);
-                printf("slt_f_%u:\n", slt_f_label + 1);
+                fprintf(file, "\tc.lt.s %s, %s\n", val1Str, val2Str);
+                fprintf(file, "\tbc1t slt_f_%u\n", slt_f_label);
+                fprintf(file, "\tli %s 0\n", destStr);
+                fprintf(file, "\tj slt_f_%u\n", slt_f_label + 1);
+                fprintf(file, "slt_f_%u:\n", slt_f_label);
+                fprintf(file, "\tli %s 1\n", destStr);
+                fprintf(file, "slt_f_%u:\n", slt_f_label + 1);
                 slt_f_label += 2; // we use 2 labels here
                 break;
             }
             case CODE_OP_SLE:
-                printf("\tsle %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tsle %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SLE_F:
             {
                 static sle_f_label = 0;
-                printf("\tc.le.s %s, %s\n", val1Str, val2Str);
-                printf("\tbc1t sle_f_%u\n", sle_f_label);
-                printf("\tli %s 0\n", destStr);
-                printf("\tj sle_f_%u\n", sle_f_label + 1);
-                printf("sle_f_%u:\n", sle_f_label);
-                printf("\tli %s 1\n", destStr);
-                printf("sle_f_%u:\n", sle_f_label + 1);
+                fprintf(file, "\tc.le.s %s, %s\n", val1Str, val2Str);
+                fprintf(file, "\tbc1t sle_f_%u\n", sle_f_label);
+                fprintf(file, "\tli %s 0\n", destStr);
+                fprintf(file, "\tj sle_f_%u\n", sle_f_label + 1);
+                fprintf(file, "sle_f_%u:\n", sle_f_label);
+                fprintf(file, "\tli %s 1\n", destStr);
+                fprintf(file, "sle_f_%u:\n", sle_f_label + 1);
                 sle_f_label += 2; // we use 2 labels here
                 break;
             }
             case CODE_OP_SEQ:
-                printf("\tseq %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tseq %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SEQ_F:
             {
                 static seq_f_label = 0;
-                printf("\tc.eq.s %s, %s\n", val1Str, val2Str);
-                printf("\tbc1t seq_f_%u\n", seq_f_label);
-                printf("\tli %s 0\n", destStr);
-                printf("\tj seq_f_%u\n", seq_f_label + 1);
-                printf("seq_f_%u:\n", seq_f_label);
-                printf("\tli %s 1\n", destStr);
-                printf("seq_f_%u:\n", seq_f_label + 1);
+                fprintf(file, "\tc.eq.s %s, %s\n", val1Str, val2Str);
+                fprintf(file, "\tbc1t seq_f_%u\n", seq_f_label);
+                fprintf(file, "\tli %s 0\n", destStr);
+                fprintf(file, "\tj seq_f_%u\n", seq_f_label + 1);
+                fprintf(file, "seq_f_%u:\n", seq_f_label);
+                fprintf(file, "\tli %s 1\n", destStr);
+                fprintf(file, "seq_f_%u:\n", seq_f_label + 1);
                 seq_f_label += 2; // we use 2 labels here
                 break;
             }
             case CODE_OP_SNE:
-                printf("\tsne %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tsne %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_SNE_F:
             {
                 static sne_f_label = 0;
-                printf("\tc.eq.s %s, %s\n", val1Str, val2Str);
-                printf("\tbc1t sne_f_%u\n", sne_f_label);
-                printf("\tli %s 1\n", destStr); // values switched on purpose
-                printf("\tj sne_f_%u\n", sne_f_label + 1);
-                printf("sne_f_%u:\n", sne_f_label);
-                printf("\tli %s 0\n", destStr); // values switched on purpose
-                printf("sne_f_%u:\n", sne_f_label + 1);
+                fprintf(file, "\tc.eq.s %s, %s\n", val1Str, val2Str);
+                fprintf(file, "\tbc1t sne_f_%u\n", sne_f_label);
+                fprintf(file, "\tli %s 1\n", destStr); // values switched on purpose
+                fprintf(file, "\tj sne_f_%u\n", sne_f_label + 1);
+                fprintf(file, "sne_f_%u:\n", sne_f_label);
+                fprintf(file, "\tli %s 0\n", destStr); // values switched on purpose
+                fprintf(file, "sne_f_%u:\n", sne_f_label + 1);
                 sne_f_label += 2; // we use 2 labels here
                 break;
             }
             case CODE_OP_BITWISE_AND:
-                printf("\tand %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tand %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_BITWISE_OR:
-                printf("\tor %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tor %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_LOGICAL_AND:
-                printf("\tand %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tand %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_OP_LOGICAL_OR:
-                printf("\tor %s, %s, %s\n", destStr, val1Str, val2Str);
+                fprintf(file, "\tor %s, %s, %s\n", destStr, val1Str, val2Str);
                 break;
             case CODE_PRINT_INTEGER:
-                printf("\tli $v0, 1\n"); // print int code = 1
-                printf("\tadd $a0, %s, $zero\n", destStr);
-                printf("\tsyscall\n");
+                fprintf(file, "\tli $v0, 1\n"); // print int code = 1
+                fprintf(file, "\tadd $a0, %s, $zero\n", destStr);
+                fprintf(file, "\tsyscall\n");
                 break;
             case CODE_PRINT_FLOAT:
-                printf("\tli $v0, 2\n"); // print float code = 2
-                printf("\tadd.s $f12, %s, $f0\n", destStr);
-                printf("\tsyscall\n");
+                fprintf(file, "\tli $v0, 2\n"); // print float code = 2
+                fprintf(file, "\tadd.s $f12, %s, $f0\n", destStr);
+                fprintf(file, "\tsyscall\n");
                 break;
             case CODE_PRINT_BOOL:
             {
@@ -1094,35 +1080,35 @@ void convert_code_to_mips()
                 int label1 = bool_label_counter++;
                 int label2 = bool_label_counter++;
                 
-                printf("\tbeq %s, $zero, LBOOL%u\n", destStr, label1);
+                fprintf(file, "\tbeq %s, $zero, LBOOL%u\n", destStr, label1);
                 
                 // print if true
-                printf("\tli $v0, 4\n"); // print string code = 4
-                printf("\tla $a0, __bool_true__\n");
-                printf("\tsyscall\n");
+                fprintf(file, "\tli $v0, 4\n"); // print string code = 4
+                fprintf(file, "\tla $a0, __bool_true__\n");
+                fprintf(file, "\tsyscall\n");
                 // --
                 
-                printf("\tj LBOOL%u\n", label2);
-                printf("LBOOL%u:\n", label1);
+                fprintf(file, "\tj LBOOL%u\n", label2);
+                fprintf(file, "LBOOL%u:\n", label1);
                 
                 // print if false
-                printf("\tli $v0, 4\n"); // print string code = 4
-                printf("\tla $a0, __bool_false__\n");
-                printf("\tsyscall\n");
+                fprintf(file, "\tli $v0, 4\n"); // print string code = 4
+                fprintf(file, "\tla $a0, __bool_false__\n");
+                fprintf(file, "\tsyscall\n");
                 // --
                 
-                printf("LBOOL%u:\n", label2);
+                fprintf(file, "LBOOL%u:\n", label2);
                 
                 ++bool_label_counter;
                 break;
             }
             case CODE_PRINT_NEWLINE:
-                printf("\tli $v0, 4\n"); // print string code = 4
-                printf("\tla $a0, __newline__\n");
-                printf("\tsyscall\n");
+                fprintf(file, "\tli $v0, 4\n"); // print string code = 4
+                fprintf(file, "\tla $a0, __newline__\n");
+                fprintf(file, "\tsyscall\n");
                 break;
             default:
-                printf("Code op %d can't be converted to MIPS\n", code->op);
+                fprintf(file, "Code op %d can't be converted to MIPS\n", code->op);
                 assert(0);
                 break;
         }
@@ -1131,7 +1117,46 @@ void convert_code_to_mips()
     }
 }
 
-int main() {
+void print_float_variables(FILE* file)
+{
+    FloatImmediate* fp = first_fp;
+    while (fp != NULL)
+    {
+        fprintf(file, "fp%u:\t.float\t%f\n", fp->id, fp->value);
+        fp = fp->next;
+    }
+}
+
+int main (int argc, char *argv[])
+{
+    // program options
+    int enable_print_tree = 0;
+    int enable_print_symbol_table = 0;
+
+    const char* output_file = "output";
+    
+    int i;
+    for (i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-o") == 0 && argc > i + 1)
+        {
+            output_file = argv[i + 1];
+            i++;
+        }
+        else if (strcmp(argv[i], "--help") == 0)
+        {
+            printf(" -o <file>    Print MIPS to file, defaults to 'output'\n");
+            printf(" --tree       Print abstract tree\n");
+            printf(" --symbol     Print print symbol table\n");
+            return 0;
+        }
+        else if (strcmp(argv[i], "--tree") == 0)
+            enable_print_tree = 1;
+        else if (strcmp(argv[i], "--symbol") == 0)
+            enable_print_symbol_table = 0;
+    }
+    // --
+ 
     int result = yyparse();
     if (result == 0)
         fprintf(stderr, "Parser: Success.\n");
@@ -1141,13 +1166,17 @@ int main() {
         return result;
     }
      
-    // print_tree(root);
+    if (enable_print_tree != 0)
+        print_tree(root);
     
     compile(root);
     
-    // print_symbol_table();
+    if (enable_print_symbol_table != 0)
+        print_symbol_table();
     
-    convert_code_to_mips();
+    FILE* file = fopen(output_file, "w");
+    convert_code_to_mips(file);
+    fclose(file);
     
     // free up stuff
     free_parse_node(root); // delete the whole tree structure    
@@ -1173,6 +1202,7 @@ int main() {
         free(first_fp);
         first_fp = ptr;
     }
+
     return 0;
 }
 

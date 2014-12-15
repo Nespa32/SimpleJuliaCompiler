@@ -6,7 +6,7 @@
 /* needed for token enum */
 #include "../bison/parser.tab.h"
 
-int __lexer_debug__ = 0; /* toggle for debug prints*/
+int __lexer_debug__ = 1; /* toggle for debug prints*/
 
 #define DEBUG_LOG(...)                  \
     do {                                \
@@ -44,8 +44,8 @@ string          {double_quote}.+{double_quote}
 "!"                         { DEBUG_LOG("[TOKEN_NEG]");
                               return TOKEN_NEG; }
 
-"+"                         { DEBUG_LOG("[TOKEN_PLUS]");
-                              return TOKEN_PLUS; }
+"+"                         { DEBUG_LOG("[TOKEN_ADD]");
+                              return TOKEN_ADD; }
 
 "-"                         { DEBUG_LOG("[TOKEN_SUB]");
                               return TOKEN_SUB; }
@@ -76,6 +76,18 @@ string          {double_quote}.+{double_quote}
 
 "=="                        { DEBUG_LOG("[TOKEN_EQ]");
                               return TOKEN_EQ; }
+                              
+"&"                         { DEBUG_LOG("[TOKEN_BITWISE_AND]");
+                              return TOKEN_BITWISE_AND; }
+
+"|"                         { DEBUG_LOG("[TOKEN_BITWISE_OR]");
+                              return TOKEN_BITWISE_OR; }
+                              
+"&&"                        { DEBUG_LOG("[TOKEN_LOGICAL_AND]");
+                              return TOKEN_LOGICAL_AND; }
+                              
+"||"                        { DEBUG_LOG("[TOKEN_LOGICAL_OR]");
+                              return TOKEN_LOGICAL_OR; }
 
 "("|")"                     { DEBUG_LOG("[%c] ", yytext[0]);
                               return yytext[0]; }
